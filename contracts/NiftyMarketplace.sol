@@ -185,10 +185,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         _validOwner(_nftAddress, _tokenId, _owner, listedItem.quantity);
 
-        require(
-            _getNow() - 1 days >= listedItem.startingTime,
-            "item not buyable"
-        );
+        require(_getNow() >= listedItem.startingTime, "item not buyable");
         _;
     }
 
