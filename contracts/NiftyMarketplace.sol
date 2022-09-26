@@ -202,18 +202,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _;
     }
 
-    modifier offerNotExists(
-        address _nftAddress,
-        uint256 _tokenId,
-        address _creator
-    ) {
-        Offer memory offer = offers[_nftAddress][_tokenId][_creator];
-        require(
-            offer.quantity == 0 || offer.deadline <= _getNow(),
-            "offer already created"
-        );
-        _;
-    }
+
 
     /// @notice Contract initializer
     function initialize(address payable _feeRecipient, uint16 _platformFee)
@@ -443,7 +432,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _quantity,
         uint256 _pricePerItem,
         uint256 _deadline
-    ) external offerNotExists(_nftAddress, _tokenId, _msgSender()) {
+    ) external nonReentrant {
         require(
             IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721) ||
                 IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155),
