@@ -202,8 +202,6 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _;
     }
 
-
-
     /// @notice Contract initializer
     function initialize(address payable _feeRecipient, uint16 _platformFee)
         public
