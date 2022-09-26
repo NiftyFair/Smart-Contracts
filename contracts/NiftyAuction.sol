@@ -454,28 +454,14 @@ contract NiftyAuction is
         delete highestBids[_nftAddress][_tokenId];
 
         uint256 payAmount;
+        uint256 platformFeeBid = _winningBid.mul(platformFee).div(1000);
 
-        if (_winningBid > auction.reservePrice) {
-            // Work out total above the reserve
-            uint256 aboveReservePrice = _winningBid.sub(auction.reservePrice);
+        IERC20(auction.payToken).safeTransfer(
+            platformFeeRecipient,
+            platformFeeBid
+        );
 
-            // Work out platform fee from above reserve amount
-            uint256 platformFeeAboveReserve = aboveReservePrice
-                .mul(platformFee)
-                .div(1000);
-
-            // Send platform fee
-            IERC20 payToken = IERC20(auction.payToken);
-            payToken.safeTransfer(
-                platformFeeRecipient,
-                platformFeeAboveReserve
-            );
-
-            // Send remaining to designer
-            payAmount = _winningBid.sub(platformFeeAboveReserve);
-        } else {
-            payAmount = _winningBid;
-        }
+        payAmount = _winningBid.sub(platformFeeBid);
 
         INiftyRoyaltyRegistry royaltyRegistry = INiftyRoyaltyRegistry(
             addressRegistry.royaltyRegistry()
@@ -487,7 +473,7 @@ contract NiftyAuction is
         (minter, royaltyAmount) = royaltyRegistry.royaltyInfo(
             _nftAddress,
             _tokenId,
-            payAmount
+            _winningBid
         );
 
         if (minter != address(0) && royaltyAmount != 0) {

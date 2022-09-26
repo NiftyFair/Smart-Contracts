@@ -124,7 +124,7 @@ async function main(network) {
   );
 
   await auctionProxy.deployed();
-  console.log('Auction Proxy deployed at ', auctionProxy.address);
+  console.log('NiftyAuction Proxy deployed at ', auctionProxy.address);
   const AUCTION_PROXY_ADDRESS = auctionProxy.address;
   const auction = await ethers.getContractAt(
     'NiftyAuction',

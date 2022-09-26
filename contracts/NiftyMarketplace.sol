@@ -367,7 +367,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         (minter, royaltyAmount) = royaltyRegistry.royaltyInfo(
             _nftAddress,
             _tokenId,
-            price.sub(feeAmount)
+            price
         );
 
         if (minter != address(0) && royaltyAmount != 0) {
@@ -376,15 +376,15 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                 minter,
                 royaltyAmount
             );
-
-            feeAmount = feeAmount.add(royaltyAmount);
         }
 
-        IERC20(_payToken).safeTransferFrom(
-            _msgSender(),
-            _owner,
-            price.sub(feeAmount)
-        );
+        if (price.sub(feeAmount).sub(royaltyAmount) > 0) {
+            IERC20(_payToken).safeTransferFrom(
+                _msgSender(),
+                _owner,
+                price.sub(feeAmount).sub(royaltyAmount)
+            );
+        }
 
         // Transfer NFT to buyer
         if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
@@ -447,6 +447,26 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         _validPayToken(address(_payToken));
 
+        require(
+            IERC20(_payToken).transferFrom(
+                _msgSender(),
+                address(this),
+                _pricePerItem.mul(_quantity)
+            ),
+            "insufficient balance or not approved"
+        );
+
+        Offer memory offer = offers[_nftAddress][_tokenId][_msgSender()];
+
+        if (offer.quantity > 0) {
+            delete (offers[_nftAddress][_tokenId][_msgSender()]);
+
+            IERC20(offer.payToken).safeTransfer(
+                _msgSender(),
+                offer.pricePerItem.mul(offer.quantity)
+            );
+        }
+
         offers[_nftAddress][_tokenId][_msgSender()] = Offer(
             _payToken,
             _quantity,
@@ -470,9 +490,19 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @param _tokenId TokenId
     function cancelOffer(address _nftAddress, uint256 _tokenId)
         external
-        offerExists(_nftAddress, _tokenId, _msgSender())
+        nonReentrant
     {
+        Offer memory offer = offers[_nftAddress][_tokenId][_msgSender()];
+
         delete (offers[_nftAddress][_tokenId][_msgSender()]);
+
+        if (offer.quantity > 0) {
+            IERC20(offer.payToken).safeTransfer(
+                _msgSender(),
+                offer.pricePerItem.mul(offer.quantity)
+            );
+        }
+
         emit OfferCanceled(_msgSender(), _nftAddress, _tokenId);
     }
 
@@ -492,7 +522,10 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 price = offer.pricePerItem.mul(offer.quantity);
         uint256 feeAmount = price.mul(platformFee).div(1e3);
 
-        offer.payToken.safeTransferFrom(_creator, feeReceipient, feeAmount);
+        delete (offers[_nftAddress][_tokenId][_creator]);
+        delete (listings[_nftAddress][_tokenId][_msgSender()]);
+
+        IERC20(offer.payToken).safeTransfer(feeReceipient, feeAmount);
 
         INiftyRoyaltyRegistry royaltyRegistry = INiftyRoyaltyRegistry(
             addressRegistry.royaltyRegistry()
@@ -504,20 +537,19 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         (minter, royaltyAmount) = royaltyRegistry.royaltyInfo(
             _nftAddress,
             _tokenId,
-            price.sub(feeAmount)
+            price
         );
 
         if (minter != address(0) && royaltyAmount != 0) {
-            offer.payToken.safeTransferFrom(_creator, minter, royaltyAmount);
-
-            feeAmount = feeAmount.add(royaltyAmount);
+            IERC20(offer.payToken).safeTransfer(minter, royaltyAmount);
         }
 
-        offer.payToken.safeTransferFrom(
-            _creator,
-            _msgSender(),
-            price.sub(feeAmount)
-        );
+        if (price.sub(feeAmount).sub(royaltyAmount) > 0) {
+            IERC20(offer.payToken).safeTransfer(
+                _msgSender(),
+                price.sub(feeAmount).sub(royaltyAmount)
+            );
+        }
 
         // Transfer NFT to buyer
         if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
@@ -546,9 +578,6 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             getPrice(address(offer.payToken)),
             offer.pricePerItem
         );
-
-        delete (listings[_nftAddress][_tokenId][_msgSender()]);
-        delete (offers[_nftAddress][_tokenId][_creator]);
     }
 
     /**
