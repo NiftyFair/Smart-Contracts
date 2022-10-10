@@ -340,6 +340,49 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _buyItem(_nftAddress, _tokenId, _payToken, _owner);
     }
 
+    function bulkBuy(
+        address[] memory contracts,
+        uint256[] memory tokenIds,
+        address[] memory payTokens,
+        address[] memory tokenOwners
+    ) external nonReentrant {
+        require(
+            contracts.length == tokenIds.length,
+            "contracts does not match tokenIds length"
+        );
+
+        require(
+            contracts.length == payTokens.length,
+            "contracts does not match paytokens length"
+        );
+
+        require(
+            contracts.length == tokenOwners.length,
+            "contracts does not match tokenOwners length"
+        );
+
+        Listing memory listedItem;
+
+        for (uint256 i = 0; i < contracts.length; i++) {
+            listedItem = listings[contracts[i]][tokenIds[i]][tokenOwners[i]];
+
+            require(listedItem.quantity > 0, "not listed item");
+            require(_getNow() >= listedItem.startingTime, "item not buyable");
+            require(listedItem.payToken == payTokens[i], "invalid pay token");
+            
+            _validOwner(contracts[i], tokenIds[i], tokenOwners[i], listedItem.quantity);
+
+            if (listedItem.endingTime > 0) {
+                require(
+                    listedItem.endingTime > _getNow(),
+                    "item ending time exceeded"
+                );
+            }
+
+            _buyItem(contracts[i], tokenIds[i], payTokens[i], tokenOwners[i]);
+        }
+    }
+
     function _buyItem(
         address _nftAddress,
         uint256 _tokenId,
@@ -661,7 +704,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         return block.timestamp;
     }
 
-    function _validPayToken(address _payToken) internal {
+    function _validPayToken(address _payToken) internal view {
         require(
             _payToken == address(0) ||
                 (addressRegistry.tokenRegistry() != address(0) &&
@@ -676,7 +719,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _tokenId,
         address _owner,
         uint256 quantity
-    ) internal {
+    ) internal view {
         if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
             IERC721 nft = IERC721(_nftAddress);
             require(nft.ownerOf(_tokenId) == _owner, "not owning item");
