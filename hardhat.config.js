@@ -42,6 +42,12 @@ module.exports = {
     gasPrice: 50,
   },
   networks: {
+    gc: {
+      url: `https://rpc.gnosischain.com`,
+      chainId: 100,
+      accounts: [`0x${PRIVATE_KEY}`]
+    },
+
     coverage: {
       url: 'http://localhost:8555',
     },

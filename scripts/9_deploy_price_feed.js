@@ -1,14 +1,13 @@
 const {
   NIFTYFAIR_ADDRESS_REGISTRY,
-  WRAPPED_XDAI_MAINNET,
-  WRAPPED_XDAI_TESTNET
+  PAY_TOKEN_MAINNET,
 } = require('./constants');
 
 async function main() {
   const Contract = await ethers.getContractFactory('NiftyPriceFeed');
   const contract = await Contract.deploy(
     NIFTYFAIR_ADDRESS_REGISTRY,
-    WRAPPED_XDAI_MAINNET
+    PAY_TOKEN_MAINNET
   );
 
   await contract.deployed();
