@@ -34,10 +34,6 @@ interface INiftyAddressRegistry {
     function royaltyRegistry() external view returns (address);
 }
 
-interface INiftyNFTFactory {
-    function exists(address) external view returns (bool);
-}
-
 interface INiftyTokenRegistry {
     function enabled(address) external view returns (bool);
 }
@@ -56,7 +52,10 @@ interface INiftyRoyaltyRegistry {
     ) external view returns (address, uint256);
 }
 
-contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract NiftyMarketplace1155 is
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     using SafeMath for uint256;
     using AddressUpgradeable for address payable;
     using SafeERC20 for IERC20;
@@ -66,48 +65,60 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address indexed owner,
         address indexed nft,
         uint256 tokenId,
+        uint256 tokenNftId,
         uint256 quantity,
         address payToken,
         uint256 pricePerItem,
         uint256 startingTime,
         uint256 endingTime
     );
+
     event ItemSold(
         address indexed seller,
         address indexed buyer,
         address indexed nft,
         uint256 tokenId,
+        uint256 tokenNftId,
         uint256 quantity,
         address payToken,
         int256 unitPrice,
         uint256 pricePerItem
     );
+
     event ItemUpdated(
         address indexed owner,
         address indexed nft,
         uint256 tokenId,
+        uint256 tokenNftId,
         address payToken,
         uint256 newPrice
     );
+
     event ItemCanceled(
         address indexed owner,
         address indexed nft,
-        uint256 tokenId
+        uint256 tokenId,
+        uint256 tokenNftId
     );
+
     event OfferCreated(
         address indexed creator,
         address indexed nft,
         uint256 tokenId,
+        uint256 tokenNftId,
         uint256 quantity,
         address payToken,
         uint256 pricePerItem,
         uint256 deadline
     );
+
     event OfferCanceled(
         address indexed creator,
         address indexed nft,
-        uint256 tokenId
+        uint256 tokenId,
+        uint256 tokenNftId
     );
+
     event UpdatePlatformFee(uint16 platformFee);
     event UpdatePlatformFeeRecipient(address payable platformFeeRecipient);
 
@@ -132,12 +143,10 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     bytes4 private constant INTERFACE_ID_ERC1155 = 0xd9b67a26;
 
     /// @notice NftAddress -> Token ID -> Owner -> Listing item
-    mapping(address => mapping(uint256 => mapping(address => Listing)))
-        public listings;
+    mapping(bytes32 => Listing) public listings;
 
     /// @notice NftAddress -> Token ID -> Offerer -> Offer
-    mapping(address => mapping(uint256 => mapping(address => Offer)))
-        public offers;
+    mapping(bytes32 => Offer) public offers;
 
     /// @notice Platform fee
     uint16 public platformFee;
@@ -148,55 +157,84 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Address registry
     INiftyAddressRegistry public addressRegistry;
 
-    modifier onlyMarketplace() {
-        require(
-            address(addressRegistry.bundleMarketplace()) == _msgSender(),
-            "sender must be bundle marketplace"
-        );
-        _;
-    }
-
     modifier isListed(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _owner
     ) {
-        Listing memory listing = listings[_nftAddress][_tokenId][_owner];
-        require(listing.quantity > 0, "not listed item");
+        require(
+            listings[
+                keccak256(
+                    abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _owner)
+                )
+            ].quantity > 0,
+            "not listed item"
+        );
         _;
     }
 
     modifier notListed(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _owner
     ) {
-        Listing memory listing = listings[_nftAddress][_tokenId][_owner];
-        require(listing.quantity == 0, "already listed");
+        require(
+            listings[
+                keccak256(
+                    abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _owner)
+                )
+            ].quantity == 0,
+            "already listed"
+        );
         _;
     }
 
     modifier validListing(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _owner
     ) {
-        Listing memory listedItem = listings[_nftAddress][_tokenId][_owner];
+        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)) {
+            require(
+                IERC1155(_nftAddress).balanceOf(_owner, _tokenId) >= uint256(1)
+            );
+        } else {
+            revert("invalid nft address");
+        }
 
-        _validOwner(_nftAddress, _tokenId, _owner, listedItem.quantity);
-
-        require(_getNow() >= listedItem.startingTime, "item not buyable");
+        require(
+            block.timestamp >=
+                listings[
+                    keccak256(
+                        abi.encodePacked(
+                            _nftAddress,
+                            _tokenId,
+                            _tokenNftId,
+                            _owner
+                        )
+                    )
+                ].startingTime,
+            "item not buyable"
+        );
         _;
     }
 
     modifier offerExists(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _creator
     ) {
-        Offer memory offer = offers[_nftAddress][_tokenId][_creator];
+        bytes32 offerKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _creator)
+        );
+
         require(
-            offer.quantity > 0 && offer.deadline > _getNow(),
+            offers[offerKey].quantity > 0 &&
+                offers[offerKey].deadline > block.timestamp,
             "offer not exists or expired"
         );
         _;
@@ -217,56 +255,68 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Method for listing NFT
     /// @param _nftAddress Address of NFT contract
     /// @param _tokenId Token ID of NFT
-    /// @param _quantity token amount to list (needed for ERC-1155 NFTs, set as 1 for ERC-721)
+    /// @param _tokenNftId TokenNftId
     /// @param _payToken Paying token
     /// @param _pricePerItem sale price for each iteam
     /// @param _startingTime scheduling for a future sale
     function listItem(
         address _nftAddress,
         uint256 _tokenId,
-        uint256 _quantity,
+        uint256 _tokenNftId,
         address _payToken,
         uint256 _pricePerItem,
         uint256 _startingTime,
         uint256 _endingTime
-    ) external notListed(_nftAddress, _tokenId, _msgSender()) {
-        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
-            IERC721 nft = IERC721(_nftAddress);
-            require(nft.ownerOf(_tokenId) == _msgSender(), "not owning item");
+    ) external notListed(_nftAddress, _tokenId, _tokenNftId, _msgSender()) {
+        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)) {
             require(
-                nft.isApprovedForAll(_msgSender(), address(this)),
-                "item not approved"
-            );
-        } else if (
-            IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)
-        ) {
-            IERC1155 nft = IERC1155(_nftAddress);
-            require(
-                nft.balanceOf(_msgSender(), _tokenId) >= _quantity,
+                IERC1155(_nftAddress).balanceOf(_msgSender(), _tokenId) >=
+                    uint256(1),
                 "must hold enough nfts"
             );
+
             require(
-                nft.isApprovedForAll(_msgSender(), address(this)),
+                IERC1155(_nftAddress).isApprovedForAll(
+                    _msgSender(),
+                    address(this)
+                ),
                 "item not approved"
             );
         } else {
             revert("invalid nft address");
         }
 
-        _validPayToken(_payToken);
+        require(
+            _payToken == address(0) ||
+                (addressRegistry.tokenRegistry() != address(0) &&
+                    INiftyTokenRegistry(addressRegistry.tokenRegistry())
+                        .enabled(_payToken)),
+            "invalid pay token"
+        );
 
-        listings[_nftAddress][_tokenId][_msgSender()] = Listing(
-            _quantity,
+        listings[
+            keccak256(
+                abi.encodePacked(
+                    _nftAddress,
+                    _tokenId,
+                    _tokenNftId,
+                    _msgSender()
+                )
+            )
+        ] = Listing(
+            uint256(1),
             _payToken,
             _pricePerItem,
             _startingTime,
             _endingTime
         );
+
         emit ItemListed(
             _msgSender(),
             _nftAddress,
             _tokenId,
-            _quantity,
+            _tokenNftId,
+            uint256(1),
             _payToken,
             _pricePerItem,
             _startingTime,
@@ -275,39 +325,74 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /// @notice Method for canceling listed NFT
-    function cancelListing(address _nftAddress, uint256 _tokenId)
+    function cancelListing(
+        address _nftAddress,
+        uint256 _tokenId,
+        uint256 _tokenNftId
+    )
         external
         nonReentrant
-        isListed(_nftAddress, _tokenId, _msgSender())
+        isListed(_nftAddress, _tokenId, _tokenNftId, _msgSender())
     {
-        _cancelListing(_nftAddress, _tokenId, _msgSender());
+        _cancelListing(_nftAddress, _tokenId, _tokenNftId, _msgSender());
     }
 
     /// @notice Method for updating listed NFT
     /// @param _nftAddress Address of NFT contract
     /// @param _tokenId Token ID of NFT
+    /// @param _tokenNftId TokenNftId
     /// @param _payToken payment token
     /// @param _newPrice New sale price for each iteam
     function updateListing(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _payToken,
         uint256 _newPrice
-    ) external nonReentrant isListed(_nftAddress, _tokenId, _msgSender()) {
-        Listing memory listedItem = listings[_nftAddress][_tokenId][
-            _msgSender()
-        ];
+    )
+        external
+        nonReentrant
+        isListed(_nftAddress, _tokenId, _tokenNftId, _msgSender())
+    {
+        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)) {
+            require(
+                IERC1155(_nftAddress).balanceOf(_msgSender(), _tokenId) >=
+                    listings[
+                        keccak256(
+                            abi.encodePacked(
+                                _nftAddress,
+                                _tokenId,
+                                _tokenNftId,
+                                _msgSender()
+                            )
+                        )
+                    ].quantity,
+                "not owning item"
+            );
+        } else {
+            revert("invalid nft address");
+        }
 
-        _validOwner(_nftAddress, _tokenId, _msgSender(), listedItem.quantity);
+        require(
+            _payToken == address(0) ||
+                (addressRegistry.tokenRegistry() != address(0) &&
+                    INiftyTokenRegistry(addressRegistry.tokenRegistry())
+                        .enabled(_payToken)),
+            "invalid pay token"
+        );
 
-        _validPayToken(_payToken);
+        bytes32 listingKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _msgSender())
+        );
 
-        listedItem.payToken = _payToken;
-        listedItem.pricePerItem = _newPrice;
+        listings[listingKey].payToken = _payToken;
+        listings[listingKey].pricePerItem = _newPrice;
+
         emit ItemUpdated(
             _msgSender(),
             _nftAddress,
             _tokenId,
+            _tokenNftId,
             _payToken,
             _newPrice
         );
@@ -316,93 +401,56 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Method for buying listed NFT
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
+    /// @param _tokenNftId TokenNftId
+    /// @param _owner current owner
     function buyItem(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _payToken,
         address _owner
     )
         external
         nonReentrant
-        isListed(_nftAddress, _tokenId, _owner)
-        validListing(_nftAddress, _tokenId, _owner)
+        isListed(_nftAddress, _tokenId, _tokenNftId, _owner)
+        validListing(_nftAddress, _tokenId, _tokenNftId, _owner)
     {
-        Listing memory listedItem = listings[_nftAddress][_tokenId][_owner];
-        require(listedItem.payToken == _payToken, "invalid pay token");
+        bytes32 listingKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _owner)
+        );
 
-        if (listedItem.endingTime > 0) {
+        require(
+            listings[listingKey].payToken == _payToken,
+            "invalid pay token"
+        );
+
+        if (listings[listingKey].endingTime > 0) {
             require(
-                listedItem.endingTime > _getNow(),
+                listings[listingKey].endingTime > block.timestamp,
                 "item ending time exceeded"
             );
         }
 
-        _buyItem(_nftAddress, _tokenId, _payToken, _owner);
-    }
-
-    function bulkBuy(
-        address[] memory contracts,
-        uint256[] memory tokenIds,
-        address[] memory payTokens,
-        address[] memory tokenOwners
-    ) external nonReentrant {
-        require(
-            contracts.length == tokenIds.length,
-            "contracts does not match tokenIds length"
-        );
-
-        require(
-            contracts.length == payTokens.length,
-            "contracts does not match paytokens length"
-        );
-
-        require(
-            contracts.length == tokenOwners.length,
-            "contracts does not match tokenOwners length"
-        );
-
-        Listing memory listedItem;
-
-        for (uint256 i = 0; i < contracts.length; i++) {
-            listedItem = listings[contracts[i]][tokenIds[i]][tokenOwners[i]];
-
-            require(listedItem.quantity > 0, "not listed item");
-            require(_getNow() >= listedItem.startingTime, "item not buyable");
-            require(listedItem.payToken == payTokens[i], "invalid pay token");
-
-            _validOwner(
-                contracts[i],
-                tokenIds[i],
-                tokenOwners[i],
-                listedItem.quantity
-            );
-
-            if (listedItem.endingTime > 0) {
-                require(
-                    listedItem.endingTime > _getNow(),
-                    "item ending time exceeded"
-                );
-            }
-
-            _buyItem(contracts[i], tokenIds[i], payTokens[i], tokenOwners[i]);
-        }
+        _buyItem(_nftAddress, _tokenId, _tokenNftId, _payToken, _owner);
     }
 
     function _buyItem(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _payToken,
         address _owner
     ) private {
-        Listing memory listedItem = listings[_nftAddress][_tokenId][_owner];
+        bytes32 listingKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _owner)
+        );
 
-        uint256 price = listedItem.pricePerItem.mul(listedItem.quantity);
-        uint256 feeAmount = price.mul(platformFee).div(1e3);
+        uint256 price = listings[listingKey].pricePerItem;
 
         IERC20(_payToken).safeTransferFrom(
             _msgSender(),
             feeReceipient,
-            feeAmount
+            price.mul(platformFee).div(1e3)
         );
 
         INiftyRoyaltyRegistry royaltyRegistry = INiftyRoyaltyRegistry(
@@ -426,98 +474,92 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             );
         }
 
-        if (price.sub(feeAmount).sub(royaltyAmount) > 0) {
+        if (price.sub(price.mul(platformFee).div(1e3)).sub(royaltyAmount) > 0) {
             IERC20(_payToken).safeTransferFrom(
                 _msgSender(),
                 _owner,
-                price.sub(feeAmount).sub(royaltyAmount)
+                price.sub(price.mul(platformFee).div(1e3)).sub(royaltyAmount)
             );
         }
 
-        // Transfer NFT to buyer
-        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
-            IERC721(_nftAddress).safeTransferFrom(
-                _owner,
-                _msgSender(),
-                _tokenId
-            );
-        } else {
-            IERC1155(_nftAddress).safeTransferFrom(
-                _owner,
-                _msgSender(),
-                _tokenId,
-                listedItem.quantity,
-                bytes("")
-            );
-        }
+        IERC1155(_nftAddress).safeTransferFrom(
+            _owner,
+            _msgSender(),
+            _tokenId,
+            uint256(1),
+            bytes("")
+        );
+
+        delete (listings[listingKey]);
 
         emit ItemSold(
             _owner,
             _msgSender(),
             _nftAddress,
             _tokenId,
-            listedItem.quantity,
+            _tokenNftId,
+            uint256(1),
             _payToken,
             getPrice(_payToken),
-            price.div(listedItem.quantity)
+            price
         );
-        delete (listings[_nftAddress][_tokenId][_owner]);
     }
 
     /// @notice Method for offering item
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
-    /// @param _payToken Paying token
-    /// @param _quantity Quantity of items
+    /// @param _tokenNftId TokenNftId
+    /// @param _payToken Paying toke
     /// @param _pricePerItem Price per item
     /// @param _deadline Offer expiration
     function createOffer(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         IERC20 _payToken,
-        uint256 _quantity,
         uint256 _pricePerItem,
         uint256 _deadline
     ) external nonReentrant {
         require(
-            IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721) ||
-                IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155),
+            IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155),
             "invalid nft address"
         );
 
+        require(_deadline > block.timestamp, "invalid expiration");
+
         require(
-            IERC721(_nftAddress).ownerOf(_tokenId) !=
-                address(addressRegistry.auction()),
-            "NFT auction is going on"
+            address(_payToken) == address(0) ||
+                (addressRegistry.tokenRegistry() != address(0) &&
+                    INiftyTokenRegistry(addressRegistry.tokenRegistry())
+                        .enabled(address(_payToken))),
+            "invalid pay token"
         );
-
-        require(_deadline > _getNow(), "invalid expiration");
-
-        _validPayToken(address(_payToken));
 
         require(
             IERC20(_payToken).transferFrom(
                 _msgSender(),
                 address(this),
-                _pricePerItem.mul(_quantity)
+                _pricePerItem
             ),
             "insufficient balance or not approved"
         );
 
-        Offer memory offer = offers[_nftAddress][_tokenId][_msgSender()];
+        bytes32 offerKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _msgSender())
+        );
 
-        if (offer.quantity > 0) {
-            delete (offers[_nftAddress][_tokenId][_msgSender()]);
-
-            IERC20(offer.payToken).safeTransfer(
+        if (offers[offerKey].quantity > 0) {
+            IERC20(offers[offerKey].payToken).safeTransfer(
                 _msgSender(),
-                offer.pricePerItem.mul(offer.quantity)
+                offers[offerKey].pricePerItem
             );
+
+            delete (offers[offerKey]);
         }
 
-        offers[_nftAddress][_tokenId][_msgSender()] = Offer(
+        offers[offerKey] = Offer(
             _payToken,
-            _quantity,
+            uint256(1),
             _pricePerItem,
             _deadline
         );
@@ -526,7 +568,8 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             _msgSender(),
             _nftAddress,
             _tokenId,
-            _quantity,
+            _tokenNftId,
+            uint256(1),
             address(_payToken),
             _pricePerItem,
             _deadline
@@ -536,96 +579,108 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Method for canceling the offer
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
-    function cancelOffer(address _nftAddress, uint256 _tokenId)
-        external
-        nonReentrant
-    {
-        Offer memory offer = offers[_nftAddress][_tokenId][_msgSender()];
+    /// @param _tokenNftId TokenNftId
+    function cancelOffer(
+        address _nftAddress,
+        uint256 _tokenId,
+        uint256 _tokenNftId
+    ) external nonReentrant {
+        bytes32 offerKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _msgSender())
+        );
 
-        delete (offers[_nftAddress][_tokenId][_msgSender()]);
-
-        if (offer.quantity > 0) {
-            IERC20(offer.payToken).safeTransfer(
+        if (offers[offerKey].quantity > 0) {
+            IERC20(offers[offerKey].payToken).safeTransfer(
                 _msgSender(),
-                offer.pricePerItem.mul(offer.quantity)
+                offers[offerKey].pricePerItem
             );
+
+            delete (offers[offerKey]);
         }
 
-        emit OfferCanceled(_msgSender(), _nftAddress, _tokenId);
+        emit OfferCanceled(_msgSender(), _nftAddress, _tokenId, _tokenNftId);
     }
 
     /// @notice Method for accepting the offer
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
+    /// @param _tokenNftId TokenNftId
     /// @param _creator Offer creator address
     function acceptOffer(
         address _nftAddress,
         uint256 _tokenId,
+        uint256 _tokenNftId,
         address _creator
-    ) external nonReentrant offerExists(_nftAddress, _tokenId, _creator) {
-        Offer memory offer = offers[_nftAddress][_tokenId][_creator];
+    )
+        external
+        nonReentrant
+        offerExists(_nftAddress, _tokenId, _tokenNftId, _creator)
+    {
+        bytes32 offerKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _creator)
+        );
 
-        _validOwner(_nftAddress, _tokenId, _msgSender(), offer.quantity);
+        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)) {
+            require(
+                IERC1155(_nftAddress).balanceOf(_msgSender(), _tokenId) >=
+                    offers[offerKey].quantity,
+                "not owning item"
+            );
+        } else {
+            revert("invalid nft address");
+        }
 
-        uint256 price = offer.pricePerItem.mul(offer.quantity);
-        uint256 feeAmount = price.mul(platformFee).div(1e3);
+        uint256 price = offers[offerKey].pricePerItem;
 
-        delete (offers[_nftAddress][_tokenId][_creator]);
-        delete (listings[_nftAddress][_tokenId][_msgSender()]);
-
-        IERC20(offer.payToken).safeTransfer(feeReceipient, feeAmount);
-
-        INiftyRoyaltyRegistry royaltyRegistry = INiftyRoyaltyRegistry(
-            addressRegistry.royaltyRegistry()
+        IERC20(offers[offerKey].payToken).safeTransfer(
+            feeReceipient,
+            price.mul(platformFee).div(1e3)
         );
 
         address minter;
         uint256 royaltyAmount;
 
-        (minter, royaltyAmount) = royaltyRegistry.royaltyInfo(
-            _nftAddress,
-            _tokenId,
-            price
-        );
+        (minter, royaltyAmount) = INiftyRoyaltyRegistry(
+            addressRegistry.royaltyRegistry()
+        ).royaltyInfo(_nftAddress, _tokenId, price);
 
         if (minter != address(0) && royaltyAmount != 0) {
-            IERC20(offer.payToken).safeTransfer(minter, royaltyAmount);
-        }
-
-        if (price.sub(feeAmount).sub(royaltyAmount) > 0) {
-            IERC20(offer.payToken).safeTransfer(
-                _msgSender(),
-                price.sub(feeAmount).sub(royaltyAmount)
+            IERC20(offers[offerKey].payToken).safeTransfer(
+                minter,
+                royaltyAmount
             );
         }
 
-        // Transfer NFT to buyer
-        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
-            IERC721(_nftAddress).safeTransferFrom(
-                _msgSender(),
+        if (price.sub(price.mul(platformFee).div(1e3)).sub(royaltyAmount) > 0) {
+            IERC20(offers[offerKey].payToken).safeTransfer(
                 _creator,
-                _tokenId
-            );
-        } else {
-            IERC1155(_nftAddress).safeTransferFrom(
-                _msgSender(),
-                _creator,
-                _tokenId,
-                offer.quantity,
-                bytes("")
+                price.sub(price.mul(platformFee).div(1e3)).sub(royaltyAmount)
             );
         }
+
+        IERC1155(_nftAddress).safeTransferFrom(
+            _msgSender(),
+            _creator,
+            _tokenId,
+            uint256(1),
+            bytes("")
+        );
 
         emit ItemSold(
             _msgSender(),
             _creator,
             _nftAddress,
             _tokenId,
-            offer.quantity,
-            address(offer.payToken),
-            getPrice(address(offer.payToken)),
-            offer.pricePerItem
+            _tokenNftId,
+            uint256(1),
+            address(offers[offerKey].payToken),
+            getPrice(address(offers[offerKey].payToken)),
+            offers[offerKey].pricePerItem
         );
+
+        delete (offers[offerKey]);
+
+        delete (listings[offerKey]);
     }
 
     /**
@@ -684,73 +739,32 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         addressRegistry = INiftyAddressRegistry(_registry);
     }
 
-    /**
-     * @notice Validate and cancel listing
-     * @dev Only bundle marketplace can access
-     */
-    function validateItemSold(
-        address _nftAddress,
-        uint256 _tokenId,
-        address _seller,
-        address _buyer
-    ) external onlyMarketplace {
-        Listing memory item = listings[_nftAddress][_tokenId][_seller];
-        if (item.quantity > 0) {
-            _cancelListing(_nftAddress, _tokenId, _seller);
-        }
-        delete (offers[_nftAddress][_tokenId][_buyer]);
-    }
-
     ////////////////////////////
     /// Internal and Private ///
     ////////////////////////////
 
-    function _getNow() internal view virtual returns (uint256) {
-        return block.timestamp;
-    }
-
-    function _validPayToken(address _payToken) internal view {
-        require(
-            _payToken == address(0) ||
-                (addressRegistry.tokenRegistry() != address(0) &&
-                    INiftyTokenRegistry(addressRegistry.tokenRegistry())
-                        .enabled(_payToken)),
-            "invalid pay token"
-        );
-    }
-
-    function _validOwner(
+    function _cancelListing(
         address _nftAddress,
         uint256 _tokenId,
-        address _owner,
-        uint256 quantity
-    ) internal view {
-        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
-            IERC721 nft = IERC721(_nftAddress);
-            require(nft.ownerOf(_tokenId) == _owner, "not owning item");
-        } else if (
-            IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)
-        ) {
-            IERC1155 nft = IERC1155(_nftAddress);
+        uint256 _tokenNftId,
+        address _owner
+    ) private {
+        bytes32 listingKey = keccak256(
+            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _owner)
+        );
+
+        if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)) {
             require(
-                nft.balanceOf(_owner, _tokenId) >= quantity,
+                IERC1155(_nftAddress).balanceOf(_owner, _tokenId) >=
+                    listings[listingKey].quantity,
                 "not owning item"
             );
         } else {
             revert("invalid nft address");
         }
-    }
 
-    function _cancelListing(
-        address _nftAddress,
-        uint256 _tokenId,
-        address _owner
-    ) private {
-        Listing memory listedItem = listings[_nftAddress][_tokenId][_owner];
+        delete (listings[listingKey]);
 
-        _validOwner(_nftAddress, _tokenId, _owner, listedItem.quantity);
-
-        delete (listings[_nftAddress][_tokenId][_owner]);
-        emit ItemCanceled(_owner, _nftAddress, _tokenId);
+        emit ItemCanceled(_owner, _nftAddress, _tokenId, _tokenNftId);
     }
 }
