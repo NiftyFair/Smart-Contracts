@@ -1,38 +1,56 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract rockPaperScissors is ERC1155 {
-    uint256 public constant Rock = 1;
-    uint256 public constant Paper = 2;
-    uint256 public constant Scissors = 3;
+contract TravelQuest is ERC1155, Ownable {
+    uint256[] public supplies = [50, 50, 50, 50, 50, 50, 150];
+    uint256[] public minted = [0, 0, 0, 0, 0, 0, 0];
+    mapping(uint256 => mapping(address => bool)) public member;
 
-    constructor() ERC1155("https://ipfs.io/ipfs/bafybeihjjkwdrxxjnuwevlqtqmh3iegcadc32sio4wmo7bv2gbf34qs34a/{id}.json") {
-        _mint(msg.sender, Rock, 1, "");
-        _mint(msg.sender, Paper, 1, "");
-        _mint(msg.sender, Scissors, 1, "");
+    constructor()
+        ERC1155(
+            "ipfs://QmSCFe5vvoPsSpyHZpGAW78GJ4bAuDcySCV9UnMm7B69iS/{id}.json"
+        )
+    {}
+
+    // to Put NFT to Opensea
+    function uri(uint256 _tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
+        require(_tokenId <= supplies.length - 1, "NFT does not exist");
+        return
+            string(
+                abi.encodePacked(
+                    "ipfs://QmSCFe5vvoPsSpyHZpGAW78GJ4bAuDcySCV9UnMm7B69iS/",
+                    Strings.toString(_tokenId),
+                    ".json"
+                )
+            );
     }
 
-    function mintRock() public {
-        _mint(msg.sender, Rock, 1, "");
-    }
+    function mint(uint256 _tokenId) public {
 
-    function mintPaper() public {
-        _mint(msg.sender, Paper, 1, "");
-    }
+        require(_tokenId <= supplies.length - 1, "NFT does not exist");
+        uint256 index = _tokenId;
 
-    function mintScissors() public {
-        _mint(msg.sender, Scissors, 1, "");
-    }
-
-    function uri(uint256 _tokenid) override public pure returns (string memory) {
-        return string(
-            abi.encodePacked(
-                "https://ipfs.io/ipfs/bafybeihjjkwdrxxjnuwevlqtqmh3iegcadc32sio4wmo7bv2gbf34qs34a/",
-                Strings.toString(_tokenid),".json"
-            )
+        require(
+            minted[index] + 1 <= supplies[index],
+            "All the NFT have been minted"
         );
+        
+        _mint(msg.sender, _tokenId, 1, "");
+        // "" is data which is set empty
+        minted[index] += 1;
+        member[_tokenId][msg.sender] = true;
+    }
+
+    function totalNftMinted(uint256 _tokenId) public view returns (uint256) {
+        return minted[_tokenId];
     }
 }
