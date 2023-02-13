@@ -11,20 +11,16 @@ async function main(network) {
   console.log(`Deployer's address: `, deployerAddress);
 
   const {
-    ZERO_ADDRESS,
     TREASURY_ADDRESS,
     PLATFORM_FEE,
     PAY_TOKEN_MAINNET,
+    PAY_TOKEN_TESTNET,
   } = require('../constants');
 
-  if (network.name !== 'localhost') {
-    payToken = PAY_TOKEN_MAINNET;
+  if (network.name === 'localhost') {
+    payToken = PAY_TOKEN_TESTNET;
   } else {
-    const PayToken = await ethers.getContractFactory('WXDAI');
-    const payTokenContract = await PayToken.deploy();
-
-    await payTokenContract.deployed();
-    payToken = payTokenContract.address;
+    payToken = PAY_TOKEN_MAINNET;
   }
 
   console.log('PayToken deployed at', payToken);
@@ -73,6 +69,11 @@ async function main(network) {
   );
 
   await marketplace.initialize(TREASURY_ADDRESS, PLATFORM_FEE);
+  console.log(
+    'NiftyMarketplace intialialized ',
+    TREASURY_ADDRESS,
+    PLATFORM_FEE
+  );
   /////////
 
   ////////
@@ -104,6 +105,11 @@ async function main(network) {
     marketplace1155Proxy.address
   );
   await marketplace1155.initialize(TREASURY_ADDRESS, PLATFORM_FEE);
+  console.log(
+    'NiftyMarketplace ERC-1155 Proxy intialialized ',
+    TREASURY_ADDRESS,
+    PLATFORM_FEE
+  );
   /////////
 
   ////////
@@ -120,13 +126,14 @@ async function main(network) {
 
   await auctionProxy.deployed();
   console.log('NiftyAuction Proxy deployed at ', auctionProxy.address);
-  const AUCTION_PROXY_ADDRESS = auctionProxy.address;
   const auction = await ethers.getContractAt(
     'NiftyAuction',
     auctionProxy.address
   );
 
   await auction.initialize(TREASURY_ADDRESS);
+  await auction.updatePlatformFee(PLATFORM_FEE);
+  console.log('NiftyAuction Proxy intialialized ', TREASURY_ADDRESS, PLATFORM_FEE);
   ////////
 
   ////////
