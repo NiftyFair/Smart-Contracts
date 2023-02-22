@@ -225,11 +225,10 @@ contract NiftyMarketplace1155 is
     modifier offerExists(
         address _nftAddress,
         uint256 _tokenId,
-        uint256 _tokenNftId,
         address _creator
     ) {
         bytes32 offerKey = keccak256(
-            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _creator)
+            abi.encodePacked(_nftAddress, _tokenId, _creator)
         );
 
         require(
@@ -508,14 +507,12 @@ contract NiftyMarketplace1155 is
     /// @notice Method for offering item
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
-    /// @param _tokenNftId TokenNftId
     /// @param _payToken Paying toke
     /// @param _pricePerItem Price per item
     /// @param _deadline Offer expiration
     function createOffer(
         address _nftAddress,
         uint256 _tokenId,
-        uint256 _tokenNftId,
         IERC20 _payToken,
         uint256 _pricePerItem,
         uint256 _deadline
@@ -545,7 +542,7 @@ contract NiftyMarketplace1155 is
         );
 
         bytes32 offerKey = keccak256(
-            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _msgSender())
+            abi.encodePacked(_nftAddress, _tokenId, _msgSender())
         );
 
         if (offers[offerKey].quantity > 0) {
@@ -568,7 +565,7 @@ contract NiftyMarketplace1155 is
             _msgSender(),
             _nftAddress,
             _tokenId,
-            _tokenNftId,
+            uint256(0),
             uint256(1),
             address(_payToken),
             _pricePerItem,
@@ -579,14 +576,12 @@ contract NiftyMarketplace1155 is
     /// @notice Method for canceling the offer
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
-    /// @param _tokenNftId TokenNftId
-    function cancelOffer(
-        address _nftAddress,
-        uint256 _tokenId,
-        uint256 _tokenNftId
-    ) external nonReentrant {
+    function cancelOffer(address _nftAddress, uint256 _tokenId)
+        external
+        nonReentrant
+    {
         bytes32 offerKey = keccak256(
-            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _msgSender())
+            abi.encodePacked(_nftAddress, _tokenId, _msgSender())
         );
 
         if (offers[offerKey].quantity > 0) {
@@ -598,26 +593,20 @@ contract NiftyMarketplace1155 is
             delete (offers[offerKey]);
         }
 
-        emit OfferCanceled(_msgSender(), _nftAddress, _tokenId, _tokenNftId);
+        emit OfferCanceled(_msgSender(), _nftAddress, _tokenId, uint256(0));
     }
 
     /// @notice Method for accepting the offer
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
-    /// @param _tokenNftId TokenNftId
     /// @param _creator Offer creator address
     function acceptOffer(
         address _nftAddress,
         uint256 _tokenId,
-        uint256 _tokenNftId,
         address _creator
-    )
-        external
-        nonReentrant
-        offerExists(_nftAddress, _tokenId, _tokenNftId, _creator)
-    {
+    ) external nonReentrant offerExists(_nftAddress, _tokenId, _creator) {
         bytes32 offerKey = keccak256(
-            abi.encodePacked(_nftAddress, _tokenId, _tokenNftId, _creator)
+            abi.encodePacked(_nftAddress, _tokenId, _creator)
         );
 
         if (IERC165(_nftAddress).supportsInterface(INTERFACE_ID_ERC1155)) {
@@ -671,7 +660,7 @@ contract NiftyMarketplace1155 is
             _creator,
             _nftAddress,
             _tokenId,
-            _tokenNftId,
+            uint256(0),
             uint256(1),
             address(offers[offerKey].payToken),
             getPrice(address(offers[offerKey].payToken)),

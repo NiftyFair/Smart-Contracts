@@ -2,19 +2,17 @@ const {
   TREASURY_ADDRESS,
   PLATFORM_FEE,
   PROXY_ADDRESS_TESTNET,
-  PROXY_ADDRESS_MAINNET
-} = require('./constants');
+  PROXY_ADDRESS_MAINNET,
+} = require("./constants");
 
 async function main() {
-  const Marketplace = await ethers.getContractFactory(
-    'NiftyBundleMarketplace'
-  );
+  const Marketplace = await ethers.getContractFactory("NiftyBundleMarketplace");
   const marketplaceImpl = await Marketplace.deploy();
   await marketplaceImpl.deployed();
-  console.log('NiftyBundleMarketplace deployed to:', marketplaceImpl.address);
+  console.log("NiftyBundleMarketplace deployed at:", marketplaceImpl.address);
 
   const AdminUpgradeabilityProxyFactory = await ethers.getContractFactory(
-    'AdminUpgradeabilityProxy'
+    "AdminUpgradeabilityProxy"
   );
 
   // Mainnet
@@ -33,16 +31,16 @@ async function main() {
 
   await marketplaceProxy.deployed();
   console.log(
-    'Bundle Marketplace Proxy deployed at ',
+    "Bundle Marketplace Proxy deployed at ",
     marketplaceProxy.address
   );
 
   const marketplace = await ethers.getContractAt(
-    'NiftyBundleMarketplace',
+    "NiftyBundleMarketplace",
     marketplaceProxy.address
   );
   await marketplace.initialize(TREASURY_ADDRESS, PLATFORM_FEE);
-  console.log('Bundle Marketplace Proxy initialized');
+  console.log("Bundle Marketplace Proxy initialized");
 }
 
 // We recommend this pattern to be able to use async/await everywhere

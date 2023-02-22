@@ -3,21 +3,21 @@ const {
   AUCTION,
   MARKETPLACE,
   BUNDLE_MARKETPLACE,
-  PLATFORM_FEE
-} = require('./constants');
+  PLATFORM_FEE,
+} = require("./constants");
 
 async function main() {
-  const Factory = await ethers.getContractFactory('NiftyNFTFactory');
+  const Factory = await ethers.getContractFactory("NiftyNFTFactory");
   const factory = await Factory.deploy(
     AUCTION,
     MARKETPLACE,
     BUNDLE_MARKETPLACE,
-    '10000000000000000000',
+    "10000000000000000000",
     TREASURY_ADDRESS,
-    '50000000000000000000'
+    "50000000000000000000"
   );
   await factory.deployed();
-  console.log('NiftyNFTFactory deployed to:', factory.address);
+  console.log("NiftyNFTFactory deployed at:", factory.address);
 
   // const PrivateFactory = await ethers.getContractFactory(
   //   'NiftyNFTFactoryPrivate'
@@ -31,7 +31,7 @@ async function main() {
   //   '50000000000000000000'
   // );
   // await privateFactory.deployed();
-  // console.log('NiftyNFTFactoryPrivate deployed to:', privateFactory.address);
+  // console.log('NiftyNFTFactoryPrivate deployed at:', privateFactory.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

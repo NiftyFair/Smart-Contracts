@@ -1,35 +1,35 @@
 const {
   TREASURY_ADDRESS,
   MARKETPLACE,
-  BUNDLE_MARKETPLACE
-} = require('./constants');
+  BUNDLE_MARKETPLACE,
+} = require("./constants");
 
 async function main() {
-  const ArtTradable = await ethers.getContractFactory('NiftyArtTradable');
+  const ArtTradable = await ethers.getContractFactory("NiftyArtTradable");
   const nft = await ArtTradable.deploy(
-    'NiftyFairArt',
-    'FART',
-    '20000000000000000000',
+    "NiftyFairArt",
+    "FART",
+    "20000000000000000000",
     TREASURY_ADDRESS,
     MARKETPLACE,
     BUNDLE_MARKETPLACE
   );
   await nft.deployed();
-  console.log('NiftyArtTradable deployed to:', nft.address);
+  console.log("NiftyArtTradable deployed at:", nft.address);
 
   const ArtTradablePrivate = await ethers.getContractFactory(
-    'NiftyArtTradablePrivate'
+    "NiftyArtTradablePrivate"
   );
   const nftPrivate = await ArtTradablePrivate.deploy(
-    'NiftyFairArt',
-    'FART',
-    '20000000000000000000',
+    "NiftyFairArt",
+    "FART",
+    "20000000000000000000",
     TREASURY_ADDRESS,
     MARKETPLACE,
     BUNDLE_MARKETPLACE
   );
   await nftPrivate.deployed();
-  console.log('NiftyArtTradablePrivate deployed to:', nftPrivate.address);
+  console.log("NiftyArtTradablePrivate deployed at:", nftPrivate.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

@@ -2,7 +2,7 @@
 // run: npx hardhat node on a terminal
 // then run: npx hardhat run --network localhost scripts/12_deploy_all.js
 async function main(network) {
-  console.log('network: ', network.name);
+  console.log("network: ", network.name);
 
   let payToken;
 
@@ -15,51 +15,51 @@ async function main(network) {
     TREASURY_ADDRESS,
     PLATFORM_FEE,
     PAY_TOKEN_MAINNET,
-  } = require('../constants');
+  } = require("../constants");
 
-  if (network.name === 'mainnet') {
+  if (network.name === "mainnet") {
     payToken = PAY_TOKEN_MAINNET;
   }
 
-  if (network.name === 'localhost') {
-    const WXDAI = await ethers.getContractFactory('WXDAI');
+  if (network.name === "localhost") {
+    const WXDAI = await ethers.getContractFactory("WXDAI");
     const wrappedXDAI = await WXDAI.deploy();
 
     payToken = await wrappedXDAI.address;
   }
 
-  console.log('PayToken deployed at', payToken);
+  console.log("PayToken deployed at: ", payToken);
 
   ////////////
-  const NiftyToken = await ethers.getContractFactory('NiftyToken');
+  const NiftyToken = await ethers.getContractFactory("NiftyToken");
   const niftyToken = await NiftyToken.deploy(
     TREASURY_ADDRESS,
-    '2000000000000000000'
+    "2000000000000000000"
   );
 
   await niftyToken.deployed();
-  console.log('NiftyToken deployed at', niftyToken.address);
+  console.log("NiftyToken deployed at: ", niftyToken.address);
   ///////////
 
   //////////
-  const ProxyAdmin = await ethers.getContractFactory('ProxyAdmin');
+  const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
   const proxyAdmin = await ProxyAdmin.deploy();
   await proxyAdmin.deployed();
 
   const PROXY_ADDRESS = proxyAdmin.address;
-  console.log('ProxyAdmin deployed to:', proxyAdmin.address);
+  console.log("ProxyAdmin deployed at:", proxyAdmin.address);
 
   const AdminUpgradeabilityProxyFactory = await ethers.getContractFactory(
-    'AdminUpgradeabilityProxy'
+    "AdminUpgradeabilityProxy"
   );
   //////////
 
   /////////
-  const Marketplace = await ethers.getContractFactory('NiftyMarketplace');
+  const Marketplace = await ethers.getContractFactory("NiftyMarketplace");
   const marketplaceImpl = await Marketplace.deploy();
   await marketplaceImpl.deployed();
 
-  console.log('NiftyMarketplace deployed to:', marketplaceImpl.address);
+  console.log("NiftyMarketplace deployed at:", marketplaceImpl.address);
 
   const marketplaceProxy = await AdminUpgradeabilityProxyFactory.deploy(
     marketplaceImpl.address,
@@ -67,10 +67,13 @@ async function main(network) {
     []
   );
   await marketplaceProxy.deployed();
-  console.log('NiftyMarketplace Proxy deployed at ', marketplaceProxy.address);
+  console.log(
+    "NiftyMarketplace Proxy deployed at:  ",
+    marketplaceProxy.address
+  );
   const MARKETPLACE_PROXY_ADDRESS = marketplaceProxy.address;
   const marketplace = await ethers.getContractAt(
-    'NiftyMarketplace',
+    "NiftyMarketplace",
     marketplaceProxy.address
   );
 
@@ -81,12 +84,12 @@ async function main(network) {
 
   /////////
   const BundleMarketplace = await ethers.getContractFactory(
-    'NiftyBundleMarketplace'
+    "NiftyBundleMarketplace"
   );
   const bundleMarketplaceImpl = await BundleMarketplace.deploy();
   await bundleMarketplaceImpl.deployed();
   console.log(
-    'NiftyBundleMarketplace deployed to:',
+    "NiftyBundleMarketplace deployed at:",
     bundleMarketplaceImpl.address
   );
 
@@ -97,12 +100,12 @@ async function main(network) {
   );
   await bundleMarketplaceProxy.deployed();
   console.log(
-    'Bundle Marketplace Proxy deployed at ',
+    "Bundle Marketplace Proxy deployed at ",
     bundleMarketplaceProxy.address
   );
   const BUNDLE_MARKETPLACE_PROXY_ADDRESS = bundleMarketplaceProxy.address;
   const bundleMarketplace = await ethers.getContractAt(
-    'NiftyBundleMarketplace',
+    "NiftyBundleMarketplace",
     bundleMarketplaceProxy.address
   );
 
@@ -112,10 +115,10 @@ async function main(network) {
   ////////
 
   ////////
-  const Auction = await ethers.getContractFactory('NiftyAuction');
+  const Auction = await ethers.getContractFactory("NiftyAuction");
   const auctionImpl = await Auction.deploy();
   await auctionImpl.deployed();
-  console.log('NiftyAuction deployed to:', auctionImpl.address);
+  console.log("NiftyAuction deployed at:", auctionImpl.address);
 
   const auctionProxy = await AdminUpgradeabilityProxyFactory.deploy(
     auctionImpl.address,
@@ -124,10 +127,10 @@ async function main(network) {
   );
 
   await auctionProxy.deployed();
-  console.log('NiftyAuction Proxy deployed at ', auctionProxy.address);
+  console.log("NiftyAuction Proxy deployed at:  ", auctionProxy.address);
   const AUCTION_PROXY_ADDRESS = auctionProxy.address;
   const auction = await ethers.getContractAt(
-    'NiftyAuction',
+    "NiftyAuction",
     auctionProxy.address
   );
 
@@ -137,162 +140,164 @@ async function main(network) {
   ////////
 
   ////////
-  const Factory = await ethers.getContractFactory('NiftyNFTFactory');
+  const Factory = await ethers.getContractFactory("NiftyNFTFactory");
   const factory = await Factory.deploy(
     AUCTION_PROXY_ADDRESS,
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS,
-    '10000000000000000000',
+    "10000000000000000000",
     TREASURY_ADDRESS,
-    '50000000000000000000'
+    "50000000000000000000"
   );
   await factory.deployed();
-  console.log('NiftyNFTFactory deployed to:', factory.address);
+  console.log("NiftyNFTFactory deployed at:", factory.address);
 
   const PrivateFactory = await ethers.getContractFactory(
-    'NiftyNFTFactoryPrivate'
+    "NiftyNFTFactoryPrivate"
   );
   const privateFactory = await PrivateFactory.deploy(
     AUCTION_PROXY_ADDRESS,
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS,
-    '10000000000000000000',
+    "10000000000000000000",
     TREASURY_ADDRESS,
-    '50000000000000000000'
+    "50000000000000000000"
   );
   await privateFactory.deployed();
-  console.log('NiftyNFTFactoryPrivate deployed to:', privateFactory.address);
+  console.log("NiftyNFTFactoryPrivate deployed at:", privateFactory.address);
   ////////
 
   ////////
-  const NFTTradable = await ethers.getContractFactory('NiftyNFTTradable');
+  const NFTTradable = await ethers.getContractFactory("NiftyNFTTradable");
   const nft = await NFTTradable.deploy(
-    'NiftyToken',
-    'NFT',
+    "NiftyToken",
+    "NFT",
     AUCTION_PROXY_ADDRESS,
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS,
-    '10000000000000000000',
+    "10000000000000000000",
     TREASURY_ADDRESS,
     false,
     ZERO_ADDRESS
   );
   await nft.deployed();
-  console.log('NiftyNFTTradable deployed to:', nft.address);
+  console.log("NiftyNFTTradable deployed at:", nft.address);
 
   const NFTTradablePrivate = await ethers.getContractFactory(
-    'NiftyNFTTradablePrivate'
+    "NiftyNFTTradablePrivate"
   );
   const nftPrivate = await NFTTradablePrivate.deploy(
-    'IArtion',
-    'IART',
+    "IArtion",
+    "IART",
     AUCTION_PROXY_ADDRESS,
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS,
-    '10000000000000000000',
+    "10000000000000000000",
     TREASURY_ADDRESS
   );
   await nftPrivate.deployed();
-  console.log('NiftyNFTTradablePrivate deployed to:', nftPrivate.address);
+  console.log("NiftyNFTTradablePrivate deployed at:", nftPrivate.address);
   ////////
 
   ////////
-  const TokenRegistry = await ethers.getContractFactory('NiftyTokenRegistry');
+  const TokenRegistry = await ethers.getContractFactory("NiftyTokenRegistry");
   const tokenRegistry = await TokenRegistry.deploy();
 
   await tokenRegistry.deployed();
 
-  console.log('NiftyTokenRegistry deployed to', tokenRegistry.address);
+  console.log("NiftyTokenRegistry deployed at:", tokenRegistry.address);
   ////////
 
   ////////
   const AddressRegistry = await ethers.getContractFactory(
-    'NiftyAddressRegistry'
+    "NiftyAddressRegistry"
   );
   const addressRegistry = await AddressRegistry.deploy();
 
   await addressRegistry.deployed();
 
-  console.log('NiftyAddressRegistry deployed to', addressRegistry.address);
+  console.log("NiftyAddressRegistry deployed at:", addressRegistry.address);
   const NIFTYFAIR_ADDRESS_REGISTRY = addressRegistry.address;
   ////////
 
   ////////
-  const PriceFeed = await ethers.getContractFactory('NiftyPriceFeed');
+  const PriceFeed = await ethers.getContractFactory("NiftyPriceFeed");
   const PAY_TOKEN = payToken;
-  const priceFeed = await PriceFeed.deploy(NIFTYFAIR_ADDRESS_REGISTRY, PAY_TOKEN);
+  const priceFeed = await PriceFeed.deploy(
+    NIFTYFAIR_ADDRESS_REGISTRY,
+    PAY_TOKEN
+  );
 
   await priceFeed.deployed();
-  console.log('NiftyPriceFeed deployed to', priceFeed.address);
+  console.log("NiftyPriceFeed deployed at:", priceFeed.address);
   ////////
 
   ////////
-  const ArtTradable = await ethers.getContractFactory('NiftyArtTradable');
+  const ArtTradable = await ethers.getContractFactory("NiftyArtTradable");
   const artTradable = await ArtTradable.deploy(
-    'NiftyFairArt',
-    'FART',
-    '20000000000000000000',
+    "NiftyFairArt",
+    "FART",
+    "20000000000000000000",
     TREASURY_ADDRESS,
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS
   );
   await artTradable.deployed();
-  console.log('NiftyArtTradable deployed to:', artTradable.address);
+  console.log("NiftyArtTradable deployed at:", artTradable.address);
 
   const ArtTradablePrivate = await ethers.getContractFactory(
-    'NiftyArtTradablePrivate'
+    "NiftyArtTradablePrivate"
   );
   const artTradablePrivate = await ArtTradablePrivate.deploy(
-    'NiftyFairArt',
-    'FART',
-    '20000000000000000000',
+    "NiftyFairArt",
+    "FART",
+    "20000000000000000000",
     TREASURY_ADDRESS,
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS
   );
   await artTradablePrivate.deployed();
   console.log(
-    'NiftyArtTradablePrivate deployed to:',
+    "NiftyArtTradablePrivate deployed at:",
     artTradablePrivate.address
   );
   ////////
 
   ////////
-  const ArtFactory = await ethers.getContractFactory('NiftyArtFactory');
+  const ArtFactory = await ethers.getContractFactory("NiftyArtFactory");
   const artFactory = await ArtFactory.deploy(
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS,
-    '20000000000000000000',
+    "20000000000000000000",
     TREASURY_ADDRESS,
-    '10000000000000000000'
+    "10000000000000000000"
   );
   await artFactory.deployed();
-  console.log('NiftyArtFactory deployed to:', artFactory.address);
+  console.log("NiftyArtFactory deployed at:", artFactory.address);
 
   const ArtFactoryPrivate = await ethers.getContractFactory(
-    'NiftyArtFactoryPrivate'
+    "NiftyArtFactoryPrivate"
   );
   const artFactoryPrivate = await ArtFactoryPrivate.deploy(
     MARKETPLACE_PROXY_ADDRESS,
     BUNDLE_MARKETPLACE_PROXY_ADDRESS,
-    '20000000000000000000',
+    "20000000000000000000",
     TREASURY_ADDRESS,
-    '10000000000000000000'
+    "10000000000000000000"
   );
   await artFactoryPrivate.deployed();
-  console.log('NiftyArtFactoryPrivate deployed to:', artFactoryPrivate.address);
+  console.log("NiftyArtFactoryPrivate deployed at:", artFactoryPrivate.address);
   ////////
 
   ////////
   const RoyaltyRegistry = await ethers.getContractFactory(
-    'NiftyRoyaltyRegistry'
+    "NiftyRoyaltyRegistry"
   );
   const royaltyRegistery = await RoyaltyRegistry.deploy();
 
   await royaltyRegistery.deployed();
 
-  console.log('NiftyRoyaltyRegistry deployed to', royaltyRegistery.address);
-
+  console.log("NiftyRoyaltyRegistry deployed at:", royaltyRegistery.address);
 
   ////////
 
@@ -319,8 +324,8 @@ async function main(network) {
 
   await tokenRegistry.add(PAY_TOKEN);
 
-  if (network.name === 'localhost') {
-    console.log('ADD PRICE ORACLE FOR TEST');
+  if (network.name === "localhost") {
+    console.log("ADD PRICE ORACLE FOR TEST");
   }
 }
 

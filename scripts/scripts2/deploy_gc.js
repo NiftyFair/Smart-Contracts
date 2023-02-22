@@ -2,7 +2,7 @@
 // run: npx hardhat node on a terminal
 // then run: npx hardhat run  scripts/scripts2/deploy_gc.js --network localhost
 async function main(network) {
-  console.log('network: ', network.name);
+  console.log("network: ", network.name);
 
   let payToken;
 
@@ -15,42 +15,42 @@ async function main(network) {
     TREASURY_ADDRESS,
     PLATFORM_FEE,
     PAY_TOKEN_MAINNET,
-  } = require('../constants');
+  } = require("../constants");
 
   payToken = PAY_TOKEN_MAINNET;
 
-  console.log('PayToken deployed at', payToken);
+  console.log("PayToken deployed at: ", payToken);
 
   ////////////
-  const NiftyToken = await ethers.getContractFactory('NiftyToken');
+  const NiftyToken = await ethers.getContractFactory("NiftyToken");
   const niftyToken = await NiftyToken.deploy(
     TREASURY_ADDRESS,
-    '2000000000000000000'
+    "2000000000000000000"
   );
 
   await niftyToken.deployed();
-  console.log('NiftyToken deployed at', niftyToken.address);
+  console.log("NiftyToken deployed at: ", niftyToken.address);
   ///////////
 
   //////////
-  const ProxyAdmin = await ethers.getContractFactory('ProxyAdmin');
+  const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
   const proxyAdmin = await ProxyAdmin.deploy();
   await proxyAdmin.deployed();
 
   const PROXY_ADDRESS = proxyAdmin.address;
-  console.log('ProxyAdmin deployed to:', proxyAdmin.address);
+  console.log("ProxyAdmin deployed at:", proxyAdmin.address);
 
   const AdminUpgradeabilityProxyFactory = await ethers.getContractFactory(
-    'AdminUpgradeabilityProxy'
+    "AdminUpgradeabilityProxy"
   );
   //////////
 
   /////////
-  const Marketplace = await ethers.getContractFactory('NiftyMarketplace');
+  const Marketplace = await ethers.getContractFactory("NiftyMarketplace");
   const marketplaceImpl = await Marketplace.deploy();
   await marketplaceImpl.deployed();
 
-  console.log('NiftyMarketplace deployed to:', marketplaceImpl.address);
+  console.log("NiftyMarketplace deployed at:", marketplaceImpl.address);
 
   const marketplaceProxy = await AdminUpgradeabilityProxyFactory.deploy(
     marketplaceImpl.address,
@@ -58,10 +58,13 @@ async function main(network) {
     []
   );
   await marketplaceProxy.deployed();
-  console.log('NiftyMarketplace Proxy deployed at ', marketplaceProxy.address);
+  console.log(
+    "NiftyMarketplace Proxy deployed at:  ",
+    marketplaceProxy.address
+  );
   const MARKETPLACE_PROXY_ADDRESS = marketplaceProxy.address;
   const marketplace = await ethers.getContractAt(
-    'NiftyMarketplace',
+    "NiftyMarketplace",
     marketplaceProxy.address
   );
 
@@ -71,10 +74,10 @@ async function main(network) {
   /////////
 
   ////////
-  const Auction = await ethers.getContractFactory('NiftyAuction');
+  const Auction = await ethers.getContractFactory("NiftyAuction");
   const auctionImpl = await Auction.deploy();
   await auctionImpl.deployed();
-  console.log('NiftyAuction deployed to:', auctionImpl.address);
+  console.log("NiftyAuction deployed at:", auctionImpl.address);
 
   const auctionProxy = await AdminUpgradeabilityProxyFactory.deploy(
     auctionImpl.address,
@@ -83,10 +86,10 @@ async function main(network) {
   );
 
   await auctionProxy.deployed();
-  console.log('NiftyAuction Proxy deployed at ', auctionProxy.address);
+  console.log("NiftyAuction Proxy deployed at:  ", auctionProxy.address);
   const AUCTION_PROXY_ADDRESS = auctionProxy.address;
   const auction = await ethers.getContractAt(
-    'NiftyAuction',
+    "NiftyAuction",
     auctionProxy.address
   );
 
@@ -96,28 +99,28 @@ async function main(network) {
   ////////
 
   ////////
-  const TokenRegistry = await ethers.getContractFactory('NiftyTokenRegistry');
+  const TokenRegistry = await ethers.getContractFactory("NiftyTokenRegistry");
   const tokenRegistry = await TokenRegistry.deploy();
 
   await tokenRegistry.deployed();
 
-  console.log('NiftyTokenRegistry deployed to', tokenRegistry.address);
+  console.log("NiftyTokenRegistry deployed at:", tokenRegistry.address);
   ////////
 
   ////////
   const AddressRegistry = await ethers.getContractFactory(
-    'NiftyAddressRegistry'
+    "NiftyAddressRegistry"
   );
   const addressRegistry = await AddressRegistry.deploy();
 
   await addressRegistry.deployed();
 
-  console.log('NiftyAddressRegistry deployed to', addressRegistry.address);
+  console.log("NiftyAddressRegistry deployed at:", addressRegistry.address);
   const NIFTYFAIR_ADDRESS_REGISTRY = addressRegistry.address;
   ////////
 
   ////////
-  const PriceFeed = await ethers.getContractFactory('NiftyPriceFeed');
+  const PriceFeed = await ethers.getContractFactory("NiftyPriceFeed");
   const PAY_TOKEN = payToken;
   const priceFeed = await PriceFeed.deploy(
     NIFTYFAIR_ADDRESS_REGISTRY,
@@ -125,19 +128,18 @@ async function main(network) {
   );
 
   await priceFeed.deployed();
-  console.log('NiftyPriceFeed deployed to', priceFeed.address);
+  console.log("NiftyPriceFeed deployed at:", priceFeed.address);
   ////////
-
 
   ////////
   const RoyaltyRegistry = await ethers.getContractFactory(
-    'NiftyRoyaltyRegistry'
+    "NiftyRoyaltyRegistry"
   );
   const royaltyRegistery = await RoyaltyRegistry.deploy();
 
   await royaltyRegistery.deployed();
 
-  console.log('NiftyRoyaltyRegistry deployed to', royaltyRegistery.address);
+  console.log("NiftyRoyaltyRegistry deployed at:", royaltyRegistery.address);
 
   ////////
 
@@ -156,9 +158,7 @@ async function main(network) {
 
   await tokenRegistry.add(PAY_TOKEN);
 
- 
-console.log('ADD PRICE ORACLE');
-  
+  console.log("ADD PRICE ORACLE");
 }
 
 // We recommend this pattern to be able to use async/await everywhere

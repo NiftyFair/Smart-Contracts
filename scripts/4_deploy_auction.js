@@ -1,10 +1,10 @@
-const { TREASURY_ADDRESS } = require('./constants');
+const { TREASURY_ADDRESS } = require("./constants");
 
 async function main() {
-  const Auction = await ethers.getContractFactory('NiftyAuction');
+  const Auction = await ethers.getContractFactory("NiftyAuction");
   const auctionImpl = await Auction.deploy();
   await auctionImpl.deployed();
-  console.log('NiftyAuction deployed to:', auctionImpl.address);
+  console.log("NiftyAuction deployed at:", auctionImpl.address);
 
   /*
   const AdminUpgradeabilityProxyFactory = await ethers.getContractFactory(

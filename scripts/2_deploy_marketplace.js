@@ -1,18 +1,18 @@
-require('dotenv').config();
-const { TREASURY_ADDRESS, PLATFORM_FEE } = require('./constants');
+require("dotenv").config();
+const { TREASURY_ADDRESS, PLATFORM_FEE } = require("./constants");
 
 async function main() {
   // const ProxyAdmin = await ethers.getContractFactory('ProxyAdmin');
   // const proxyAdmin = await ProxyAdmin.deploy();
   // await proxyAdmin.deployed();
 
-  // console.log('ProxyAdmin deployed to:', proxyAdmin.address);
+  // console.log('ProxyAdmin deployed at:', proxyAdmin.address);
 
-  const Marketplace = await ethers.getContractFactory('NiftyMarketplace');
+  const Marketplace = await ethers.getContractFactory("NiftyMarketplace");
   const marketplaceImpl = await Marketplace.deploy();
   await marketplaceImpl.deployed();
 
-  console.log('NiftyMarketplace deployed to:', marketplaceImpl.address);
+  console.log("NiftyMarketplace deployed at:", marketplaceImpl.address);
 
   // const AdminUpgradeabilityProxyFactory = await ethers.getContractFactory(
   //   'AdminUpgradeabilityProxy'

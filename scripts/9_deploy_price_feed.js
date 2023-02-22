@@ -1,10 +1,10 @@
 const {
   NIFTYFAIR_ADDRESS_REGISTRY,
   PAY_TOKEN_MAINNET,
-} = require('./constants');
+} = require("./constants");
 
 async function main() {
-  const Contract = await ethers.getContractFactory('NiftyPriceFeed');
+  const Contract = await ethers.getContractFactory("NiftyPriceFeed");
   const contract = await Contract.deploy(
     NIFTYFAIR_ADDRESS_REGISTRY,
     PAY_TOKEN_MAINNET
@@ -12,7 +12,7 @@ async function main() {
 
   await contract.deployed();
 
-  console.log('NiftyPriceFeed deployed to', contract.address);
+  console.log("NiftyPriceFeed deployed at:", contract.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

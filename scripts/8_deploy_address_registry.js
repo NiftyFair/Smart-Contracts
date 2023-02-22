@@ -1,10 +1,10 @@
 async function main() {
-  const Registry = await ethers.getContractFactory('NiftyAddressRegistry');
+  const Registry = await ethers.getContractFactory("NiftyAddressRegistry");
   const contract = await Registry.deploy();
 
   await contract.deployed();
 
-  console.log('NiftyAddressRegistry deployed to', contract.address);
+  console.log("NiftyAddressRegistry deployed at:", contract.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
