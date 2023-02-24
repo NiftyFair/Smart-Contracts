@@ -59,7 +59,11 @@ contract NiftyAuction is
     event AuctionCreated(
         address indexed nftAddress,
         uint256 indexed tokenId,
-        address payToken
+        address payToken,
+        uint256 reservePrice,
+        bool minBidReserve,
+        uint256 startTimestamp,
+        uint256 endTimestamp
     );
 
     event UpdateAuctionReservePrice(
@@ -208,8 +212,8 @@ contract NiftyAuction is
         uint256 _tokenId,
         address _payToken,
         uint256 _reservePrice,
+        bool _minBidReserve,
         uint256 _startTimestamp,
-        bool minBidReserve,
         uint256 _endTimestamp
     ) external whenNotPaused {
         // Ensure this contract is approved to move the token
@@ -241,8 +245,8 @@ contract NiftyAuction is
             _tokenId,
             _payToken,
             _reservePrice,
+            _minBidReserve,
             _startTimestamp,
-            minBidReserve,
             _endTimestamp
         );
     }
@@ -793,8 +797,8 @@ contract NiftyAuction is
         uint256 _tokenId,
         address _payToken,
         uint256 _reservePrice,
+        bool _minBidReserve,
         uint256 _startTimestamp,
-        bool minBidReserve,
         uint256 _endTimestamp
     ) private {
         // Ensure a token cannot be re-listed if previously successfully sold
@@ -814,7 +818,7 @@ contract NiftyAuction is
 
         uint256 minimumBid = 0;
 
-        if (minBidReserve) {
+        if (_minBidReserve) {
             minimumBid = _reservePrice;
         }
 
@@ -836,7 +840,15 @@ contract NiftyAuction is
             resulted: false
         });
 
-        emit AuctionCreated(_nftAddress, _tokenId, _payToken);
+        emit AuctionCreated(
+            _nftAddress,
+            _tokenId,
+            _payToken,
+            _reservePrice,
+            _minBidReserve,
+            _startTimestamp,
+            _endTimestamp
+        );
     }
 
     function _cancelAuction(

@@ -80,42 +80,6 @@ async function main(network) {
   /////////
 
   ////////
-  const Marketplace1155 = await ethers.getContractFactory(
-    "NiftyMarketplace1155"
-  );
-  const marketplace1155Impl = await Marketplace1155.deploy();
-  await marketplace1155Impl.deployed();
-
-  console.log(
-    "NiftyMarketplace ERC-1155 deployed at:",
-    marketplace1155Impl.address
-  );
-
-  const marketplace1155Proxy = await AdminUpgradeabilityProxyFactory.deploy(
-    marketplace1155Impl.address,
-    PROXY_ADDRESS,
-    []
-  );
-
-  await marketplace1155Proxy.deployed();
-  console.log(
-    "NiftyMarketplace ERC-1155 Proxy deployed at:  ",
-    marketplace1155Proxy.address
-  );
-
-  const marketplace1155 = await ethers.getContractAt(
-    "NiftyMarketplace1155",
-    marketplace1155Proxy.address
-  );
-  await marketplace1155.initialize(TREASURY_ADDRESS, PLATFORM_FEE);
-  console.log(
-    "NiftyMarketplace ERC-1155 Proxy intialialized:  ",
-    TREASURY_ADDRESS,
-    PLATFORM_FEE
-  );
-  /////////
-
-  ////////
   const Auction = await ethers.getContractFactory("NiftyAuction");
   const auctionImpl = await Auction.deploy();
   await auctionImpl.deployed();
