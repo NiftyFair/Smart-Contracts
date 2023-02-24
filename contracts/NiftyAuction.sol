@@ -57,6 +57,7 @@ contract NiftyAuction is
     event PauseToggled(bool isPaused);
 
     event AuctionCreated(
+        address indexed owner,
         address indexed nftAddress,
         uint256 indexed tokenId,
         address payToken,
@@ -67,6 +68,7 @@ contract NiftyAuction is
     );
 
     event UpdateAuctionReservePrice(
+        address indexed owner,
         address indexed nftAddress,
         uint256 indexed tokenId,
         address payToken,
@@ -684,6 +686,7 @@ contract NiftyAuction is
         }
 
         emit UpdateAuctionReservePrice(
+            _msgSender(),
             _nftAddress,
             _tokenId,
             auction.payToken,
@@ -841,6 +844,7 @@ contract NiftyAuction is
         });
 
         emit AuctionCreated(
+            _msgSender(),
             _nftAddress,
             _tokenId,
             _payToken,
