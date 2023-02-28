@@ -485,12 +485,6 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "invalid nft address"
         );
 
-        require(
-            IERC721(_nftAddress).ownerOf(_tokenId) !=
-                address(addressRegistry.auction()),
-            "NFT auction is going on"
-        );
-
         require(_deadline > _getNow(), "invalid expiration");
 
         _validPayToken(address(_payToken));
