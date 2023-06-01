@@ -153,8 +153,6 @@ async function main(network) {
   ////////
 
   await marketplace.updateAddressRegistry(NIFTYFAIR_ADDRESS_REGISTRY);
-  await marketplace1155.updateAddressRegistry(NIFTYFAIR_ADDRESS_REGISTRY);
-
   await auction.updateAddressRegistry(NIFTYFAIR_ADDRESS_REGISTRY);
 
   await addressRegistry.updateArtion(niftyToken.address);
