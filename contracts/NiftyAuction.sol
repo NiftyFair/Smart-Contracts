@@ -308,11 +308,8 @@ contract NiftyAuction is
 
         require(whenNotPaused(), "contract paused");
         require(
-            IERC721(_nftAddress).ownerOf(_tokenId) == _msgSender() &&
-                IERC721(_nftAddress).isApprovedForAll(
-                    _msgSender(),
-                    address(this)
-                ),
+            IERC721(_nftAddress).ownerOf(_tokenId) == user &&
+                IERC721(_nftAddress).isApprovedForAll(user, address(this)),
             "not owner and or contract not approved"
         );
 
