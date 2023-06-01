@@ -120,6 +120,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     struct ListItemParams {
+        address user;
         address nftAddress;
         uint256 tokenId;
         uint256 quantity;
@@ -127,52 +128,51 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 pricePerItem;
         uint256 startingTime;
         uint256 endingTime;
-        bytes signature;
     }
 
     struct CancelListingParams {
+        address user;
         address nftAddress;
         uint256 tokenId;
-        bytes signature;
     }
 
     struct UpdateListingParams {
+        address user;
         address nftAddress;
         uint256 tokenId;
         address payToken;
         uint256 newPrice;
-        bytes signature;
     }
 
     struct BuyItemParams {
+        address user;
         address nftAddress;
         uint256 tokenId;
         address payToken;
         address owner;
-        bytes signature;
     }
 
     struct CreateOfferParams {
+        address user;
         address nftAddress;
         uint256 tokenId;
         IERC20 payToken;
         uint256 quantity;
         uint256 pricePerItem;
         uint256 deadline;
-        bytes signature;
     }
 
     struct CancelOfferParams {
+        address user;
         address nftAddress;
         uint256 tokenId;
-        bytes signature;
     }
 
     struct AcceptOfferParams {
+        address user;
         address nftAddress;
         uint256 tokenId;
         address creator;
-        bytes signature;
     }
 
     bytes4 private constant INTERFACE_ID_ERC721 = 0x80ac58cd;
@@ -195,50 +195,44 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Address registry
     INiftyAddressRegistry public addressRegistry;
 
-    modifier isListed(
+    function isListed(
         address _nftAddress,
         uint256 _tokenId,
         address _owner
-    ) {
+    ) public view returns (bool) {
         Listing memory listing = listings[_nftAddress][_tokenId][_owner];
-        require(listing.quantity > 0, "not listed item");
-        _;
+        return listing.quantity > 0;
     }
 
-    modifier notListed(
+    function notListed(
         address _nftAddress,
         uint256 _tokenId,
         address _owner
-    ) {
+    ) public view returns (bool) {
         Listing memory listing = listings[_nftAddress][_tokenId][_owner];
-        require(listing.quantity == 0, "already listed");
-        _;
+        return listing.quantity == 0;
     }
 
-    modifier validListing(
+    function validListing(
         address _nftAddress,
         uint256 _tokenId,
         address _owner
-    ) {
+    ) public view returns (bool) {
         Listing memory listedItem = listings[_nftAddress][_tokenId][_owner];
 
         _validOwner(_nftAddress, _tokenId, _owner, listedItem.quantity);
 
-        require(_getNow() >= listedItem.startingTime, "item not buyable");
-        _;
+        return _getNow() >= listedItem.startingTime;
     }
 
-    modifier offerExists(
+    function offerExists(
         address _nftAddress,
         uint256 _tokenId,
         address _creator
-    ) {
+    ) public view returns (bool) {
         Offer memory offer = offers[_nftAddress][_tokenId][_creator];
-        require(
-            offer.quantity > 0 && offer.deadline > _getNow(),
-            "offer not exists or expired"
-        );
-        _;
+
+        return offer.quantity > 0 && offer.deadline > _getNow();
     }
 
     /// @notice Contract initializer
@@ -269,16 +263,21 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _pricePerItem,
         uint256 _startingTime,
         uint256 _endingTime
-    ) external nonReentrant notListed(_nftAddress, _tokenId, _msgSender()) {
+    ) external nonReentrant {
+        require(
+            notListed(_nftAddress, _tokenId, _msgSender()),
+            "already listed"
+        );
+
         ListItemParams memory params = ListItemParams({
+            user: _msgSender(),
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             quantity: _quantity,
             payToken: _payToken,
             pricePerItem: _pricePerItem,
             startingTime: _startingTime,
-            endingTime: _endingTime,
-            signature: bytes("")
+            endingTime: _endingTime
         });
 
         _listItem(params);
@@ -302,36 +301,33 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _startingTime,
         uint256 _endingTime,
         bytes memory _signature
-    )
-        external
-        notListed(
-            _nftAddress,
-            _tokenId,
-            _recoverAddressFromSignature(
-                keccak256(
-                    abi.encodePacked(
-                        _nftAddress,
-                        _tokenId,
-                        _quantity,
-                        _payToken,
-                        _pricePerItem,
-                        _startingTime,
-                        _endingTime
-                    )
-                ),
-                _signature
-            )
-        )
-    {
+    ) external {
+        address user = _recoverAddressFromSignature(
+            keccak256(
+                abi.encodePacked(
+                    _nftAddress,
+                    _tokenId,
+                    _quantity,
+                    _payToken,
+                    _pricePerItem,
+                    _startingTime,
+                    _endingTime
+                )
+            ),
+            _signature
+        );
+
+        require(notListed(_nftAddress, _tokenId, user), "already listed");
+
         ListItemParams memory params = ListItemParams({
+            user: user,
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             quantity: _quantity,
             payToken: _payToken,
             pricePerItem: _pricePerItem,
             startingTime: _startingTime,
-            endingTime: _endingTime,
-            signature: _signature
+            endingTime: _endingTime
         });
 
         _listItem(params);
@@ -341,11 +337,13 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function cancelListing(
         address _nftAddress,
         uint256 _tokenId
-    ) external nonReentrant isListed(_nftAddress, _tokenId, _msgSender()) {
+    ) external nonReentrant {
+        require(isListed(_nftAddress, _tokenId, _msgSender()), "not listed");
+
         CancelListingParams memory params = CancelListingParams({
+            user: _msgSender(),
             nftAddress: _nftAddress,
-            tokenId: _tokenId,
-            signature: bytes("")
+            tokenId: _tokenId
         });
 
         _cancelListing(params);
@@ -356,22 +354,18 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address _nftAddress,
         uint256 _tokenId,
         bytes memory _signature
-    )
-        external
-        nonReentrant
-        isListed(
-            _nftAddress,
-            _tokenId,
-            _recoverAddressFromSignature(
-                keccak256(abi.encodePacked(_nftAddress, _tokenId)),
-                _signature
-            )
-        )
-    {
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            _signature
+        );
+
+        require(isListed(_nftAddress, _tokenId, user), "not listed");
+
         CancelListingParams memory params = CancelListingParams({
+            user: user,
             nftAddress: _nftAddress,
-            tokenId: _tokenId,
-            signature: _signature
+            tokenId: _tokenId
         });
 
         _cancelListing(params);
@@ -387,13 +381,15 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _tokenId,
         address _payToken,
         uint256 _newPrice
-    ) external nonReentrant isListed(_nftAddress, _tokenId, _msgSender()) {
+    ) external nonReentrant {
+        require(isListed(_nftAddress, _tokenId, _msgSender()), "not listed");
+
         UpdateListingParams memory params = UpdateListingParams({
+            user: _msgSender(),
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             payToken: _payToken,
-            newPrice: _newPrice,
-            signature: bytes("")
+            newPrice: _newPrice
         });
 
         _updateListing(params);
@@ -411,31 +407,22 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address _payToken,
         uint256 _newPrice,
         bytes memory _signature
-    )
-        external
-        nonReentrant
-        isListed(
-            _nftAddress,
-            _tokenId,
-            _recoverAddressFromSignature(
-                keccak256(
-                    abi.encodePacked(
-                        _nftAddress,
-                        _tokenId,
-                        _payToken,
-                        _newPrice
-                    )
-                ),
-                _signature
-            )
-        )
-    {
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(
+                abi.encodePacked(_nftAddress, _tokenId, _payToken, _newPrice)
+            ),
+            _signature
+        );
+
+        require(isListed(_nftAddress, _tokenId, user), "not listed");
+
         UpdateListingParams memory params = UpdateListingParams({
+            user: user,
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             payToken: _payToken,
-            newPrice: _newPrice,
-            signature: _signature
+            newPrice: _newPrice
         });
 
         _updateListing(params);
@@ -449,18 +436,16 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _tokenId,
         address _payToken,
         address _owner
-    )
-        external
-        nonReentrant
-        isListed(_nftAddress, _tokenId, _owner)
-        validListing(_nftAddress, _tokenId, _owner)
-    {
+    ) external nonReentrant {
+        require(isListed(_nftAddress, _tokenId, _owner), "not listed");
+        require(validListing(_nftAddress, _tokenId, _owner), "invalid listing");
+
         BuyItemParams memory params = BuyItemParams({
+            user: _msgSender(),
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             payToken: _payToken,
-            owner: _owner,
-            signature: bytes("")
+            owner: _owner
         });
 
         _buyItem(params);
@@ -476,57 +461,69 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address _payToken,
         address _owner,
         bytes memory _signature
-    )
-        external
-        nonReentrant
-        isListed(_nftAddress, _tokenId, _owner)
-        validListing(_nftAddress, _tokenId, _owner)
-    {
+    ) external nonReentrant {
+        require(isListed(_nftAddress, _tokenId, _owner), "not listed");
+        require(validListing(_nftAddress, _tokenId, _owner), "invalid listing");
+
+        address user = _recoverAddressFromSignature(
+            keccak256(
+                abi.encodePacked(_nftAddress, _tokenId, _payToken, _owner)
+            ),
+            _signature
+        );
+
         BuyItemParams memory params = BuyItemParams({
+            user: user,
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             payToken: _payToken,
-            owner: _owner,
-            signature: _signature
+            owner: _owner
         });
 
         _buyItem(params);
     }
 
+    /// @notice Method for buying multiple items at once
+    /// @param _nftAddresses NFT array contract address
+    /// @param _tokenIds array of TokenId
+    /// @param _payTokens array of paying tokens
+    /// @param _tokenOwners array of token owners
     function bulkBuy(
-        address[] memory contracts,
-        uint256[] memory tokenIds,
-        address[] memory payTokens,
-        address[] memory tokenOwners
+        address[] memory _nftAddresses,
+        uint256[] memory _tokenIds,
+        address[] memory _payTokens,
+        address[] memory _tokenOwners
     ) external nonReentrant {
         require(
-            contracts.length == tokenIds.length,
+            _nftAddresses.length == _tokenIds.length,
             "contracts does not match tokenIds length"
         );
 
         require(
-            contracts.length == payTokens.length,
+            _nftAddresses.length == _payTokens.length,
             "contracts does not match paytokens length"
         );
 
         require(
-            contracts.length == tokenOwners.length,
+            _nftAddresses.length == _tokenOwners.length,
             "contracts does not match tokenOwners length"
         );
 
         Listing memory listedItem;
 
-        for (uint256 i = 0; i < contracts.length; i++) {
-            listedItem = listings[contracts[i]][tokenIds[i]][tokenOwners[i]];
+        for (uint256 i = 0; i < _nftAddresses.length; i++) {
+            listedItem = listings[_nftAddresses[i]][_tokenIds[i]][
+                _tokenOwners[i]
+            ];
 
             require(listedItem.quantity > 0, "not listed item");
             require(_getNow() >= listedItem.startingTime, "item not buyable");
-            require(listedItem.payToken == payTokens[i], "invalid pay token");
+            require(listedItem.payToken == _payTokens[i], "invalid pay token");
 
             _validOwner(
-                contracts[i],
-                tokenIds[i],
-                tokenOwners[i],
+                _nftAddresses[i],
+                _tokenIds[i],
+                _tokenOwners[i],
                 listedItem.quantity
             );
 
@@ -539,11 +536,87 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
             _buyItem(
                 BuyItemParams({
-                    nftAddress: contracts[i],
-                    tokenId: tokenIds[i],
-                    payToken: payTokens[i],
-                    owner: tokenOwners[i],
-                    signature: bytes("")
+                    user: _msgSender(),
+                    nftAddress: _nftAddresses[i],
+                    tokenId: _tokenIds[i],
+                    payToken: _payTokens[i],
+                    owner: _tokenOwners[i]
+                })
+            );
+        }
+    }
+
+    /// @notice Method for buying multiple items at once
+    /// @param _nftAddresses NFT array contract address
+    /// @param _tokenIds array of TokenId
+    /// @param _payTokens array of paying tokens
+    /// @param _tokenOwners array of token owners
+    function bulkBuyMeta(
+        address[] memory _nftAddresses,
+        uint256[] memory _tokenIds,
+        address[] memory _payTokens,
+        address[] memory _tokenOwners,
+        bytes memory _signature
+    ) external nonReentrant {
+        require(
+            _nftAddresses.length == _tokenIds.length,
+            "contracts does not match tokenIds length"
+        );
+
+        require(
+            _nftAddresses.length == _payTokens.length,
+            "contracts does not match paytokens length"
+        );
+
+        require(
+            _nftAddresses.length == _tokenOwners.length,
+            "contracts does not match tokenOwners length"
+        );
+
+        address user = _recoverAddressFromSignature(
+            keccak256(
+                abi.encodePacked(
+                    _nftAddresses,
+                    _tokenIds,
+                    _payTokens,
+                    _tokenOwners
+                )
+            ),
+            _signature
+        );
+
+        Listing memory listedItem;
+
+        for (uint256 i = 0; i < _nftAddresses.length; i++) {
+            listedItem = listings[_nftAddresses[i]][_tokenIds[i]][
+                _tokenOwners[i]
+            ];
+
+            require(listedItem.quantity > 0, "not listed item");
+            require(_getNow() >= listedItem.startingTime, "item not buyable");
+            require(listedItem.payToken == _payTokens[i], "invalid pay token");
+
+            _validOwner(
+                _nftAddresses[i],
+                _tokenIds[i],
+                _tokenOwners[i],
+                listedItem.quantity
+            );
+
+            if (listedItem.endingTime > 0) {
+                require(
+                    listedItem.endingTime > _getNow(),
+                    "item ending time exceeded"
+                );
+            }
+
+            _buyItem(
+                BuyItemParams({
+                    user: user,
+                    nftAddress: _nftAddresses[i],
+                    tokenId: _tokenIds[i],
+                    payToken: _payTokens[i],
+                    owner: _tokenOwners[i]
                 })
             );
         }
@@ -565,13 +638,13 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _deadline
     ) external nonReentrant {
         CreateOfferParams memory params = CreateOfferParams({
+            user: _msgSender(),
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             payToken: _payToken,
             quantity: _quantity,
             pricePerItem: _pricePerItem,
-            deadline: _deadline,
-            signature: bytes("")
+            deadline: _deadline
         });
 
         _createOffer(params);
@@ -594,14 +667,28 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _deadline,
         bytes memory _signature
     ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(
+                abi.encodePacked(
+                    _nftAddress,
+                    _tokenId,
+                    _payToken,
+                    _quantity,
+                    _pricePerItem,
+                    _deadline
+                )
+            ),
+            _signature
+        );
+
         CreateOfferParams memory params = CreateOfferParams({
+            user: user,
             nftAddress: _nftAddress,
             tokenId: _tokenId,
             payToken: _payToken,
             quantity: _quantity,
             pricePerItem: _pricePerItem,
-            deadline: _deadline,
-            signature: _signature
+            deadline: _deadline
         });
 
         _createOffer(params);
@@ -615,9 +702,9 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _tokenId
     ) external nonReentrant {
         CancelOfferParams memory params = CancelOfferParams({
+            user: _msgSender(),
             nftAddress: _nftAddress,
-            tokenId: _tokenId,
-            signature: bytes("")
+            tokenId: _tokenId
         });
 
         _cancelOffer(params);
@@ -632,10 +719,14 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _tokenId,
         bytes memory _signature
     ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            _signature
+        );
         CancelOfferParams memory params = CancelOfferParams({
+            user: user,
             nftAddress: _nftAddress,
-            tokenId: _tokenId,
-            signature: _signature
+            tokenId: _tokenId
         });
 
         _cancelOffer(params);
@@ -649,12 +740,16 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         address _nftAddress,
         uint256 _tokenId,
         address _creator
-    ) external nonReentrant offerExists(_nftAddress, _tokenId, _creator) {
+    ) external nonReentrant {
+        require(
+            offerExists(_nftAddress, _tokenId, _creator),
+            "offer does not exists"
+        );
         AcceptOfferParams memory params = AcceptOfferParams({
+            user: _msgSender(),
             nftAddress: _nftAddress,
             tokenId: _tokenId,
-            creator: _creator,
-            signature: bytes("")
+            creator: _creator
         });
 
         _acceptOffer(params);
@@ -670,12 +765,22 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _tokenId,
         address _creator,
         bytes memory _signature
-    ) external nonReentrant offerExists(_nftAddress, _tokenId, _creator) {
+    ) external nonReentrant {
+        require(
+            offerExists(_nftAddress, _tokenId, _creator),
+            "offer does not exists"
+        );
+
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId, _creator)),
+            _signature
+        );
+
         AcceptOfferParams memory params = AcceptOfferParams({
+            user: user,
             nftAddress: _nftAddress,
             tokenId: _tokenId,
-            creator: _creator,
-            signature: _signature
+            creator: _creator
         });
 
         _acceptOffer(params);
@@ -776,31 +881,18 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         }
     }
 
-    function _listItem(ListItemParams memory params) internal {
-        address user;
-
-        if (params.signature.length == 0) {
-            user = _msgSender();
-        } else {
-            user = _recoverAddressFromSignature(
-                keccak256(
-                    abi.encodePacked(
-                        params.nftAddress,
-                        params.tokenId,
-                        params.quantity,
-                        params.payToken,
-                        params.pricePerItem,
-                        params.startingTime,
-                        params.endingTime
-                    )
-                ),
-                params.signature
-            );
-        }
+    function _listItem(ListItemParams memory params) internal nonReentrant {
+        require(
+            notListed(params.nftAddress, params.tokenId, params.user),
+            "already listed"
+        );
 
         if (IERC165(params.nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
             IERC721 nft = IERC721(params.nftAddress);
-            require(nft.ownerOf(params.tokenId) == user, "not owning item");
+            require(
+                nft.ownerOf(params.tokenId) == params.user,
+                "not owning item"
+            );
             require(
                 nft.isApprovedForAll(_msgSender(), address(this)),
                 "item not approved"
@@ -831,7 +923,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             params.endingTime
         );
         emit ItemListed(
-            user,
+            params.user,
             params.nftAddress,
             params.tokenId,
             params.quantity,
@@ -842,59 +934,45 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
-    function _cancelListing(CancelListingParams memory params) internal {
-        address user;
-        if (params.signature.length == 0) {
-            user = _msgSender();
-        } else {
-            user = _recoverAddressFromSignature(
-                keccak256(abi.encodePacked(params.nftAddress, params.tokenId)),
-                params.signature
-            );
-        }
+    function _cancelListing(
+        CancelListingParams memory params
+    ) internal nonReentrant {
+        require(
+            isListed(params.nftAddress, params.tokenId, params.user),
+            "not listed"
+        );
 
         Listing memory listedItem = listings[params.nftAddress][params.tokenId][
-            user
+            params.user
         ];
 
         _validOwner(
             params.nftAddress,
             params.tokenId,
-            user,
+            params.user,
             listedItem.quantity
         );
 
-        delete (listings[params.nftAddress][params.tokenId][user]);
-        emit ItemCanceled(user, params.nftAddress, params.tokenId);
+        delete (listings[params.nftAddress][params.tokenId][params.user]);
+        emit ItemCanceled(params.user, params.nftAddress, params.tokenId);
     }
 
-    function _updateListing(UpdateListingParams memory params) internal {
-        address user;
-
-        if (params.signature.length == 0) {
-            user = _msgSender();
-        } else {
-            user = _recoverAddressFromSignature(
-                keccak256(
-                    abi.encodePacked(
-                        params.nftAddress,
-                        params.tokenId,
-                        params.payToken,
-                        params.newPrice
-                    )
-                ),
-                params.signature
-            );
-        }
+    function _updateListing(
+        UpdateListingParams memory params
+    ) internal nonReentrant {
+        require(
+            isListed(params.nftAddress, params.tokenId, params.user),
+            "not listed"
+        );
 
         Listing memory listedItem = listings[params.nftAddress][params.tokenId][
-            user
+            params.user
         ];
 
         _validOwner(
             params.nftAddress,
             params.tokenId,
-            user,
+            params.user,
             listedItem.quantity
         );
 
@@ -903,7 +981,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         listedItem.payToken = params.payToken;
         listedItem.pricePerItem = params.newPrice;
         emit ItemUpdated(
-            user,
+            params.user,
             params.nftAddress,
             params.tokenId,
             params.payToken,
@@ -911,24 +989,16 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
-    function _buyItem(BuyItemParams memory params) internal {
-        address user;
+    function _buyItem(BuyItemParams memory params) internal nonReentrant {
+        require(
+            isListed(params.nftAddress, params.tokenId, params.owner),
+            "not listed"
+        );
 
-        if (params.signature.length == 0) {
-            user = _msgSender();
-        } else {
-            user = _recoverAddressFromSignature(
-                keccak256(
-                    abi.encodePacked(
-                        params.nftAddress,
-                        params.tokenId,
-                        params.payToken,
-                        params.owner
-                    )
-                ),
-                params.signature
-            );
-        }
+        require(
+            validListing(params.nftAddress, params.tokenId, params.owner),
+            "invalid listing"
+        );
 
         Listing memory listedItem = listings[params.nftAddress][params.tokenId][
             params.owner
@@ -947,7 +1017,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 feeAmount = price.mul(platformFee).div(1e3);
 
         IERC20(params.payToken).safeTransferFrom(
-            user,
+            params.user,
             feeReceipient,
             feeAmount
         );
@@ -967,7 +1037,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         if (minter != address(0) && royaltyAmount != 0) {
             IERC20(params.payToken).safeTransferFrom(
-                user,
+                params.user,
                 minter,
                 royaltyAmount
             );
@@ -975,7 +1045,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         if (price.sub(feeAmount).sub(royaltyAmount) > 0) {
             IERC20(params.payToken).safeTransferFrom(
-                user,
+                params.user,
                 params.owner,
                 price.sub(feeAmount).sub(royaltyAmount)
             );
@@ -985,13 +1055,13 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         if (IERC165(params.nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
             IERC721(params.nftAddress).safeTransferFrom(
                 params.owner,
-                user,
+                params.user,
                 params.tokenId
             );
         } else {
             IERC1155(params.nftAddress).safeTransferFrom(
                 params.owner,
-                user,
+                params.user,
                 params.tokenId,
                 listedItem.quantity,
                 bytes("")
@@ -1000,7 +1070,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         emit ItemSold(
             params.owner,
-            user,
+            params.user,
             params.nftAddress,
             params.tokenId,
             listedItem.quantity,
@@ -1011,27 +1081,9 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         delete (listings[params.nftAddress][params.tokenId][params.owner]);
     }
 
-    function _createOffer(CreateOfferParams memory params) internal {
-        address user;
-
-        if (params.signature.length == 0) {
-            user = _msgSender();
-        } else {
-            user = _recoverAddressFromSignature(
-                keccak256(
-                    abi.encodePacked(
-                        params.nftAddress,
-                        params.tokenId,
-                        params.payToken,
-                        params.quantity,
-                        params.pricePerItem,
-                        params.deadline
-                    )
-                ),
-                params.signature
-            );
-        }
-
+    function _createOffer(
+        CreateOfferParams memory params
+    ) internal nonReentrant {
         require(
             IERC165(params.nftAddress).supportsInterface(INTERFACE_ID_ERC721) ||
                 IERC165(params.nftAddress).supportsInterface(
@@ -1046,25 +1098,27 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         require(
             IERC20(params.payToken).transferFrom(
-                user,
+                params.user,
                 address(this),
                 params.pricePerItem.mul(params.quantity)
             ),
             "insufficient balance or not approved"
         );
 
-        Offer memory offer = offers[params.nftAddress][params.tokenId][user];
+        Offer memory offer = offers[params.nftAddress][params.tokenId][
+            params.user
+        ];
 
         if (offer.quantity > 0) {
-            delete (offers[params.nftAddress][params.tokenId][user]);
+            delete (offers[params.nftAddress][params.tokenId][params.user]);
 
             IERC20(offer.payToken).safeTransfer(
-                user,
+                params.user,
                 offer.pricePerItem.mul(offer.quantity)
             );
         }
 
-        offers[params.nftAddress][params.tokenId][user] = Offer(
+        offers[params.nftAddress][params.tokenId][params.user] = Offer(
             params.payToken,
             params.quantity,
             params.pricePerItem,
@@ -1072,7 +1126,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
 
         emit OfferCreated(
-            user,
+            params.user,
             params.nftAddress,
             params.tokenId,
             params.quantity,
@@ -1082,18 +1136,9 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
-    function _cancelOffer(CancelOfferParams memory params) internal {
-        address user;
-
-        if (params.signature.length == 0) {
-            user = _msgSender();
-        } else {
-            user = _recoverAddressFromSignature(
-                keccak256(abi.encodePacked(params.nftAddress, params.tokenId)),
-                params.signature
-            );
-        }
-
+    function _cancelOffer(
+        CancelOfferParams memory params
+    ) internal nonReentrant {
         Offer memory offer = offers[params.nftAddress][params.tokenId][
             _msgSender()
         ];
@@ -1107,38 +1152,33 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             );
         }
 
-        emit OfferCanceled(user, params.nftAddress, params.tokenId);
+        emit OfferCanceled(params.user, params.nftAddress, params.tokenId);
     }
 
-    function _acceptOffer(AcceptOfferParams memory params) internal {
-        address user;
-
-        if (params.signature.length == 0) {
-            user = _msgSender();
-        } else {
-            user = _recoverAddressFromSignature(
-                keccak256(
-                    abi.encodePacked(
-                        params.nftAddress,
-                        params.tokenId,
-                        params.creator
-                    )
-                ),
-                params.signature
-            );
-        }
+    function _acceptOffer(
+        AcceptOfferParams memory params
+    ) internal nonReentrant {
+        require(
+            offerExists(params.nftAddress, params.tokenId, params.creator),
+            "offer does not exists"
+        );
 
         Offer memory offer = offers[params.nftAddress][params.tokenId][
             params.creator
         ];
 
-        _validOwner(params.nftAddress, params.tokenId, user, offer.quantity);
+        _validOwner(
+            params.nftAddress,
+            params.tokenId,
+            params.user,
+            offer.quantity
+        );
 
         uint256 price = offer.pricePerItem.mul(offer.quantity);
         uint256 feeAmount = price.mul(platformFee).div(1e3);
 
         delete (offers[params.nftAddress][params.tokenId][params.creator]);
-        delete (listings[params.nftAddress][params.tokenId][user]);
+        delete (listings[params.nftAddress][params.tokenId][params.user]);
 
         IERC20(offer.payToken).safeTransfer(feeReceipient, feeAmount);
 
@@ -1169,13 +1209,13 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         // Transfer NFT to buyer
         if (IERC165(params.nftAddress).supportsInterface(INTERFACE_ID_ERC721)) {
             IERC721(params.nftAddress).safeTransferFrom(
-                user,
+                params.user,
                 params.creator,
                 params.tokenId
             );
         } else {
             IERC1155(params.nftAddress).safeTransferFrom(
-                user,
+                params.user,
                 params.creator,
                 params.tokenId,
                 offer.quantity,
@@ -1184,7 +1224,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         }
 
         emit ItemSold(
-            user,
+            params.user,
             params.creator,
             params.nftAddress,
             params.tokenId,
