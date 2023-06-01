@@ -894,7 +894,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                 "not owning item"
             );
             require(
-                nft.isApprovedForAll(_msgSender(), address(this)),
+                nft.isApprovedForAll(params.user, address(this)),
                 "item not approved"
             );
         } else if (
@@ -902,11 +902,11 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         ) {
             IERC1155 nft = IERC1155(params.nftAddress);
             require(
-                nft.balanceOf(_msgSender(), params.tokenId) >= params.quantity,
+                nft.balanceOf(params.user, params.tokenId) >= params.quantity,
                 "must hold enough nfts"
             );
             require(
-                nft.isApprovedForAll(_msgSender(), address(this)),
+                nft.isApprovedForAll(params.user, address(this)),
                 "item not approved"
             );
         } else {
@@ -915,7 +915,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         _validPayToken(params.payToken);
 
-        listings[params.nftAddress][params.tokenId][_msgSender()] = Listing(
+        listings[params.nftAddress][params.tokenId][params.user] = Listing(
             params.quantity,
             params.payToken,
             params.pricePerItem,
@@ -1132,14 +1132,14 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     function _cancelOffer(CancelOfferParams memory params) internal {
         Offer memory offer = offers[params.nftAddress][params.tokenId][
-            _msgSender()
+            params.user
         ];
 
-        delete (offers[params.nftAddress][params.tokenId][_msgSender()]);
+        delete (offers[params.nftAddress][params.tokenId][params.user]);
 
         if (offer.quantity > 0) {
             IERC20(offer.payToken).safeTransfer(
-                _msgSender(),
+                params.user,
                 offer.pricePerItem.mul(offer.quantity)
             );
         }
@@ -1191,7 +1191,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         if (price.sub(feeAmount).sub(royaltyAmount) > 0) {
             IERC20(offer.payToken).safeTransfer(
-                _msgSender(),
+                params.user,
                 price.sub(feeAmount).sub(royaltyAmount)
             );
         }
