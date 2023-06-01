@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -124,6 +125,39 @@ contract NiftyAuction is
         uint256 lastBidTime;
     }
 
+    struct CreatAuctionParams {
+        address user;
+        address nftAddress;
+        uint256 tokenId;
+        address payToken;
+        uint256 reservePrice;
+        uint256 startTimestamp;
+        bool minBidReserve;
+        uint256 endTimestamp;
+    }
+
+    struct PlaceBidParams {
+        address user;
+        address nftAddress;
+        uint256 tokenId;
+        uint256 bidAmount;
+    }
+
+    struct ResultAuctionParams {
+        address user;
+        address nftAddress;
+        uint256 tokenId;
+        address winner;
+        uint256 winningBid;
+    }
+
+    struct CancelAuctionParams {
+        address user;
+        address nftAddress;
+        uint256 tokenId;
+        address owner;
+    }
+
     /// @notice ERC721 Address -> Token ID -> Auction Parameters
     mapping(address => mapping(uint256 => Auction)) public auctions;
 
@@ -151,14 +185,12 @@ contract NiftyAuction is
     /// @notice for switching off auction creations, bids and withdrawals
     bool public isPaused;
 
-    modifier whenNotPaused() {
-        require(!isPaused, "contract paused");
-        _;
+    function whenNotPaused() public view returns (bool) {
+        return !isPaused;
     }
 
-    modifier onlyNotContract() {
-        require(_msgSender() == tx.origin);
-        _;
+    function onlyNotContract() public view returns (bool) {
+        return _msgSender() == tx.origin;
     }
 
     /// @notice Contract initializer
@@ -197,8 +229,8 @@ contract NiftyAuction is
         uint256 _startTimestamp,
         bool minBidReserve,
         uint256 _endTimestamp
-    ) external whenNotPaused {
-        // Ensure this contract is approved to move the token
+    ) external nonReentrant {
+        require(whenNotPaused(), "contract paused");
         require(
             IERC721(_nftAddress).ownerOf(_tokenId) == _msgSender() &&
                 IERC721(_nftAddress).isApprovedForAll(
@@ -222,15 +254,94 @@ contract NiftyAuction is
             "Auction time exceeds maximum length"
         );
 
-        _createAuction(
-            _nftAddress,
-            _tokenId,
-            _payToken,
-            _reservePrice,
-            _startTimestamp,
-            minBidReserve,
-            _endTimestamp
+        CreatAuctionParams memory params = CreatAuctionParams({
+            user: _msgSender(),
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            payToken: _payToken,
+            reservePrice: _reservePrice,
+            startTimestamp: _startTimestamp,
+            minBidReserve: minBidReserve,
+            endTimestamp: _endTimestamp
+        });
+
+        _createAuction(params);
+    }
+
+    /**
+     @notice Creates a new auction for a given item
+     @dev Only the owner of item can create an auction and must have approved the contract
+     @dev In addition to owning the item, the sender also has to have the MINTER role.
+     @dev End time for the auction must be in the future.
+     @param _nftAddress ERC 721 Address
+     @param _tokenId Token ID of the item being auctioned
+     @param _payToken Paying token
+     @param _reservePrice Item cannot be sold for less than this or minBidIncrement, whichever is higher
+     @param _startTimestamp Unix epoch in seconds for the auction start time
+     @param _endTimestamp Unix epoch in seconds for the auction end time.
+     @param _signature Signature of the auction params
+     */
+    function createAuctionMeta(
+        address _nftAddress,
+        uint256 _tokenId,
+        address _payToken,
+        uint256 _reservePrice,
+        uint256 _startTimestamp,
+        bool minBidReserve,
+        uint256 _endTimestamp,
+        bytes memory _signature
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(
+                abi.encodePacked(
+                    _nftAddress,
+                    _tokenId,
+                    _payToken,
+                    _reservePrice,
+                    _startTimestamp,
+                    minBidReserve,
+                    _endTimestamp
+                )
+            ),
+            _signature
         );
+
+        require(whenNotPaused(), "contract paused");
+        require(
+            IERC721(_nftAddress).ownerOf(_tokenId) == _msgSender() &&
+                IERC721(_nftAddress).isApprovedForAll(
+                    _msgSender(),
+                    address(this)
+                ),
+            "not owner and or contract not approved"
+        );
+
+        require(
+            (addressRegistry.tokenRegistry() != address(0) &&
+                INiftyTokenRegistry(addressRegistry.tokenRegistry()).enabled(
+                    _payToken
+                )),
+            "invalid pay token"
+        );
+
+        // Adds hard limits to cap the maximum auction length
+        require(
+            _endTimestamp <= (_getNow() + maxAuctionLength),
+            "Auction time exceeds maximum length"
+        );
+
+        CreatAuctionParams memory params = CreatAuctionParams({
+            user: user,
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            payToken: _payToken,
+            reservePrice: _reservePrice,
+            startTimestamp: _startTimestamp,
+            minBidReserve: minBidReserve,
+            endTimestamp: _endTimestamp
+        });
+
+        _createAuction(params);
     }
 
     /**
@@ -245,9 +356,11 @@ contract NiftyAuction is
         address _nftAddress,
         uint256 _tokenId,
         uint256 _bidAmount
-    ) external nonReentrant whenNotPaused onlyNotContract {
-        // Check the auction to see if this is a valid bid
+    ) external nonReentrant {
         Auction memory auction = auctions[_nftAddress][_tokenId];
+
+        require(whenNotPaused(), "contract paused");
+        require(onlyNotContract(), "no contracts permitted");
 
         require(auction.endTime > 0, "No auction exists");
 
@@ -264,53 +377,63 @@ contract NiftyAuction is
             "ERC20 method used for NF auction"
         );
 
-        _placeBid(_nftAddress, _tokenId, _bidAmount);
+        PlaceBidParams memory params = PlaceBidParams({
+            user: _msgSender(),
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            bidAmount: _bidAmount
+        });
+
+        _placeBid(params);
     }
 
-    function _placeBid(
+    /**
+     @notice Places a new bid, out bidding the existing bidder if found and criteria is reached
+     @dev Only callable when the auction is open
+     @dev Bids from smart contracts are prohibited to prevent griefing with always reverting receiver
+     @param _nftAddress ERC 721 Address
+     @param _tokenId Token ID of the item being auctioned
+     @param _bidAmount Bid amount
+     @param _signature Signature of the auction params
+     */
+    function placeBidMeta(
         address _nftAddress,
         uint256 _tokenId,
-        uint256 _bidAmount
-    ) internal whenNotPaused {
-        Auction storage auction = auctions[_nftAddress][_tokenId];
+        uint256 _bidAmount,
+        bytes memory _signature
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId, _bidAmount)),
+            _signature
+        );
+        Auction memory auction = auctions[_nftAddress][_tokenId];
 
-        if (auction.minBid == auction.reservePrice) {
-            require(
-                _bidAmount >= auction.reservePrice,
-                "bid cannot be lower than reserve price"
-            );
-        }
+        require(whenNotPaused(), "contract paused");
+        require(onlyNotContract(), "no contracts permitted");
 
-        // Ensure bid adheres to outbid increment and threshold
-        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
-        uint256 minBidRequired = highestBid.bid.add(minBidIncrement);
+        require(auction.endTime > 0, "No auction exists");
 
+        // Ensure auction is in flight
         require(
-            _bidAmount >= minBidRequired,
-            "failed to outbid highest bidder"
+            _getNow() >= auction.startTime,
+            "bidding before auction started"
         );
 
-        IERC20 payToken = IERC20(auction.payToken);
+        require(_getNow() <= auction.endTime, "bidding outside auction window");
+
         require(
-            payToken.transferFrom(_msgSender(), address(this), _bidAmount),
-            "insufficient balance or not approved"
+            auction.payToken != address(0),
+            "ERC20 method used for NF auction"
         );
 
-        if (highestBid.bidder != address(0)) {
-            _refundHighestBidder(
-                _nftAddress,
-                _tokenId,
-                highestBid.bidder,
-                highestBid.bid
-            );
-        }
+        PlaceBidParams memory params = PlaceBidParams({
+            user: user,
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            bidAmount: _bidAmount
+        });
 
-        // assign top bidder and bid time
-        highestBid.bidder = payable(_msgSender());
-        highestBid.bid = _bidAmount;
-        highestBid.lastBidTime = _getNow();
-
-        emit BidPlaced(_nftAddress, _tokenId, _msgSender(), _bidAmount);
+        _placeBid(params);
     }
 
     /**
@@ -322,16 +445,18 @@ contract NiftyAuction is
     function withdrawBid(
         address _nftAddress,
         uint256 _tokenId
-    ) external nonReentrant whenNotPaused {
+    ) external nonReentrant {
         HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
+        Auction memory auction = auctions[_nftAddress][_tokenId];
 
+        uint256 previousBid = highestBid.bid;
+
+        require(whenNotPaused(), "contract paused");
         // Ensure highest bidder is the caller
         require(
             highestBid.bidder == _msgSender(),
             "you are not the highest bidder"
         );
-
-        Auction memory auction = auctions[_nftAddress][_tokenId];
 
         require(
             _getNow() > auction.endTime + 43200 ||
@@ -339,8 +464,6 @@ contract NiftyAuction is
                     highestBid.bid < auction.reservePrice),
             "can withdraw only after 12 hours (after auction ended)"
         );
-
-        uint256 previousBid = highestBid.bid;
 
         // Clean up the existing top bid
         delete highestBids[_nftAddress][_tokenId];
@@ -354,6 +477,48 @@ contract NiftyAuction is
         );
 
         emit BidWithdrawn(_nftAddress, _tokenId, _msgSender(), previousBid);
+    }
+
+    /**
+     @notice Allows the hightest bidder to withdraw the bid (after 12 hours post auction's end) 
+     @dev Only callable by the existing top bidder
+     @param _nftAddress ERC 721 Address
+     @param _tokenId Token ID of the item being auctioned
+     @param _signature Signature of the auction params
+     */
+    function withdrawBidMeta(
+        address _nftAddress,
+        uint256 _tokenId,
+        bytes memory _signature
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            _signature
+        );
+
+        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
+        Auction memory auction = auctions[_nftAddress][_tokenId];
+
+        uint256 previousBid = highestBid.bid;
+
+        require(whenNotPaused(), "contract paused");
+        // Ensure highest bidder is the caller
+        require(highestBid.bidder == user, "you are not the highest bidder");
+
+        require(
+            _getNow() > auction.endTime + 43200 ||
+                (_getNow() > auction.endTime &&
+                    highestBid.bid < auction.reservePrice),
+            "can withdraw only after 12 hours (after auction ended)"
+        );
+
+        // Clean up the existing top bid
+        delete highestBids[_nftAddress][_tokenId];
+
+        // Refund the top bidder
+        _refundHighestBidder(_nftAddress, _tokenId, payable(user), previousBid);
+
+        emit BidWithdrawn(_nftAddress, _tokenId, user, previousBid);
     }
 
     //////////
@@ -412,7 +577,15 @@ contract NiftyAuction is
             "highest bid is below reservePrice"
         );
 
-        _resultAuction(_nftAddress, _tokenId, _winner, _winningBid);
+        ResultAuctionParams memory params = ResultAuctionParams({
+            user: _msgSender(),
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            winner: _winner,
+            winningBid: _winningBid
+        });
+
+        _resultAuction(params);
     }
 
     /**
@@ -423,78 +596,64 @@ contract NiftyAuction is
      @param _nftAddress ERC 721 Address
      @param _tokenId Token ID of the item being auctioned
      */
-    function _resultAuction(
+    function resultAuctionMeta(
         address _nftAddress,
         uint256 _tokenId,
-        address _winner,
-        uint256 _winningBid
-    ) internal {
+        bytes memory _signature
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            _signature
+        );
         // Check the auction to see if it can be resulted
         Auction storage auction = auctions[_nftAddress][_tokenId];
 
-        // Result the auction
-        auction.resulted = true;
+        // Store auction owner
+        address seller = auction.owner;
 
-        // Clean up the highest bid
-        delete highestBids[_nftAddress][_tokenId];
+        // Get info on who the highest bidder is
+        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
+        address _winner = highestBid.bidder;
+        uint256 _winningBid = highestBid.bid;
 
-        uint256 payAmount;
-        uint256 platformFeeBid = _winningBid.mul(platformFee).div(1000);
-
-        IERC20(auction.payToken).safeTransfer(
-            platformFeeRecipient,
-            platformFeeBid
+        // Ensure user is either auction winner or seller
+        require(
+            user == _winner || user == seller,
+            "user must be auction winner or seller"
         );
 
-        payAmount = _winningBid.sub(platformFeeBid);
-
-        INiftyRoyaltyRegistry royaltyRegistry = INiftyRoyaltyRegistry(
-            addressRegistry.royaltyRegistry()
+        // Ensure this contract is the owner of the item
+        require(
+            IERC721(_nftAddress).ownerOf(_tokenId) == address(this),
+            "address(this) must be the item owner"
         );
 
-        address minter;
-        uint256 royaltyAmount;
+        // Check the auction real
+        require(auction.endTime > 0, "no auction exists");
 
-        (minter, royaltyAmount) = royaltyRegistry.royaltyInfo(
-            _nftAddress,
-            _tokenId,
-            _winningBid
+        // Check the auction has ended
+        require(_getNow() > auction.endTime, "auction not ended");
+
+        // Ensure auction not already resulted
+        require(!auction.resulted, "auction already resulted");
+
+        // Ensure there is a winner
+        require(_winner != address(0), "no open bids");
+
+        require(
+            _winningBid >= auction.reservePrice || user == seller,
+            "highest bid is below reservePrice"
         );
 
-        if (minter != address(0) && royaltyAmount != 0) {
-            IERC20 payToken = IERC20(auction.payToken);
-            payToken.safeTransfer(minter, royaltyAmount);
+        ResultAuctionParams memory params = ResultAuctionParams({
+            user: user,
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            winner: _winner,
+            winningBid: _winningBid
+        });
 
-            payAmount = payAmount.sub(royaltyAmount);
-        }
-
-        if (payAmount > 0) {
-            IERC20 payToken = IERC20(auction.payToken);
-            payToken.safeTransfer(auction.owner, payAmount);
-        }
-
-        // Transfer the token to the winner
-        IERC721(_nftAddress).safeTransferFrom(
-            IERC721(_nftAddress).ownerOf(_tokenId),
-            _winner,
-            _tokenId
-        );
-
-        int256 price = INiftyMarketplace(addressRegistry.marketplace())
-            .getPrice(auction.payToken);
-
-        emit AuctionResulted(
-            _msgSender(),
-            _nftAddress,
-            _tokenId,
-            _winner,
-            auction.payToken,
-            price,
-            _winningBid
-        );
-
-        // Remove auction
-        delete auctions[_nftAddress][_tokenId];
+        _resultAuction(params);
     }
 
     /**
@@ -515,6 +674,11 @@ contract NiftyAuction is
         // Store auction owner
         address seller = auction.owner;
 
+        // Get info on who the highest bidder is
+        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
+        address payable topBidder = highestBid.bidder;
+        uint256 topBid = highestBid.bid;
+
         // Ensure this contract is the owner of the item
         require(
             IERC721(_nftAddress).ownerOf(_tokenId) == address(this),
@@ -530,11 +694,6 @@ contract NiftyAuction is
         // Ensure auction not already resulted
         require(!auction.resulted, "auction already resulted");
 
-        // Get info on who the highest bidder is
-        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
-        address payable topBidder = highestBid.bidder;
-        uint256 topBid = highestBid.bid;
-
         // Ensure _msgSender() is either auction topBidder or seller
         require(
             _msgSender() == topBidder || _msgSender() == seller,
@@ -548,7 +707,81 @@ contract NiftyAuction is
             "highest bid is >= reservePrice"
         );
 
-        _cancelAuction(_nftAddress, _tokenId, seller);
+        CancelAuctionParams memory params = CancelAuctionParams({
+            user: _msgSender(),
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            owner: seller
+        });
+
+        _cancelAuction(params);
+    }
+
+    /**
+     @notice Results an auction that failed to meet the auction.reservePrice
+     @dev Only admin or smart contract
+     @dev Auction can only be fail-resulted if the auction has expired and the auction.reservePrice has not been met
+     @dev If there have been no bids, the auction needs to be cancelled instead using `cancelAuction()`
+     @param _nftAddress ERC 721 Address
+     @param _tokenId Token ID of the item being auctioned
+     @param _signature Signature of the auction params
+     */
+    function resultFailedAuctionMeta(
+        address _nftAddress,
+        uint256 _tokenId,
+        bytes memory _signature
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            _signature
+        );
+        // Check the auction to see if it can be resulted
+        Auction storage auction = auctions[_nftAddress][_tokenId];
+
+        // Store auction owner
+        address seller = auction.owner;
+
+        // Get info on who the highest bidder is
+        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
+        address payable topBidder = highestBid.bidder;
+        uint256 topBid = highestBid.bid;
+
+        // Ensure this contract is the owner of the item
+        require(
+            IERC721(_nftAddress).ownerOf(_tokenId) == address(this),
+            "address(this) must be the item owner"
+        );
+
+        // Check if the auction exists
+        require(auction.endTime > 0, "no auction exists");
+
+        // Check if the auction has ended
+        require(_getNow() > auction.endTime, "auction not ended");
+
+        // Ensure auction not already resulted
+        require(!auction.resulted, "auction already resulted");
+
+        // Ensure user is either auction topBidder or seller
+        require(
+            user == topBidder || user == seller,
+            "_msgSender() must be auction topBidder or seller"
+        );
+
+        // Ensure the topBid is less than the auction.reservePrice
+        require(topBidder != address(0), "no open bids");
+        require(
+            topBid < auction.reservePrice,
+            "highest bid is >= reservePrice"
+        );
+
+        CancelAuctionParams memory params = CancelAuctionParams({
+            user: user,
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            owner: seller
+        });
+
+        _cancelAuction(params);
     }
 
     /**
@@ -563,6 +796,7 @@ contract NiftyAuction is
     ) external nonReentrant {
         // Check valid and not resulted
         Auction memory auction = auctions[_nftAddress][_tokenId];
+        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
 
         require(
             IERC721(_nftAddress).ownerOf(_tokenId) == address(this) &&
@@ -576,14 +810,66 @@ contract NiftyAuction is
         // Check auction not already resulted
         require(!auction.resulted, "auction already resulted");
 
-        // Gets info on auction and ensures highest bid is less than the reserve price
-        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
         require(
             highestBid.bid < auction.reservePrice,
             "Highest bid is currently above reserve price"
         );
 
-        _cancelAuction(_nftAddress, _tokenId, _msgSender());
+        CancelAuctionParams memory params = CancelAuctionParams({
+            user: _msgSender(),
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            owner: _msgSender()
+        });
+
+        _cancelAuction(params);
+    }
+
+    /**
+     @notice Cancels and inflight and un-resulted auctions, returning the funds to the top bidder if found
+     @dev Only item owner
+     @param _nftAddress ERC 721 Address
+     @param _tokenId Token ID of the NFT being auctioned
+     */
+    function cancelAuctionMeta(
+        address _nftAddress,
+        uint256 _tokenId,
+        bytes memory _signature
+    ) external nonReentrant {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            _signature
+        );
+
+        // Check valid and not resulted
+        Auction memory auction = auctions[_nftAddress][_tokenId];
+        HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
+
+        require(
+            IERC721(_nftAddress).ownerOf(_tokenId) == address(this) &&
+                user == auction.owner,
+            "sender must be owner"
+        );
+
+        // Check auction is real
+        require(auction.endTime > 0, "no auction exists");
+
+        // Check auction not already resulted
+        require(!auction.resulted, "auction already resulted");
+
+        require(
+            highestBid.bid < auction.reservePrice,
+            "Highest bid is currently above reserve price"
+        );
+
+        CancelAuctionParams memory params = CancelAuctionParams({
+            user: user,
+            nftAddress: _nftAddress,
+            tokenId: _tokenId,
+            owner: user
+        });
+
+        _cancelAuction(params);
     }
 
     /**
@@ -763,95 +1049,205 @@ contract NiftyAuction is
         return block.timestamp;
     }
 
-    /**
-     @notice Private method doing the heavy lifting of creating an auction
-     @param _nftAddress ERC 721 Address
-     @param _tokenId Token ID of the NFT being auctioned
-     @param _payToken Paying token
-     @param _reservePrice Item cannot be sold for less than this or minBidIncrement, whichever is higher
-     @param _startTimestamp Unix epoch in seconds for the auction start time
-     @param _endTimestamp Unix epoch in seconds for the auction end time.
-     */
     function _createAuction(
-        address _nftAddress,
-        uint256 _tokenId,
-        address _payToken,
-        uint256 _reservePrice,
-        uint256 _startTimestamp,
-        bool minBidReserve,
-        uint256 _endTimestamp
-    ) private {
+        CreatAuctionParams memory params
+    ) internal nonReentrant {
         // Ensure a token cannot be re-listed if previously successfully sold
         require(
-            auctions[_nftAddress][_tokenId].endTime == 0,
+            auctions[params.nftAddress][params.tokenId].endTime == 0,
             "auction already started"
         );
 
         // Check end time not before start time and that end is in the future
         require(
-            _endTimestamp > _startTimestamp,
+            params.endTimestamp > params.startTimestamp,
             "end time must be greater than start time"
         );
 
         // Check if start time not smaller than today
-        require(_startTimestamp > (_getNow() - 1 days), "invalid start time");
+        require(
+            params.startTimestamp > (_getNow() - 1 days),
+            "invalid start time"
+        );
 
         uint256 minimumBid = 0;
 
-        if (minBidReserve) {
-            minimumBid = _reservePrice;
+        if (params.minBidReserve) {
+            minimumBid = params.reservePrice;
         }
 
-        IERC721(_nftAddress).safeTransferFrom(
-            IERC721(_nftAddress).ownerOf(_tokenId),
+        IERC721(params.nftAddress).safeTransferFrom(
+            IERC721(params.nftAddress).ownerOf(params.tokenId),
             address(this),
-            _tokenId
+            params.tokenId
         );
 
         // Setup the auction
-        auctions[_nftAddress][_tokenId] = Auction({
-            owner: _msgSender(),
-            payToken: _payToken,
+        auctions[params.nftAddress][params.tokenId] = Auction({
+            owner: params.user,
+            payToken: params.payToken,
             minBid: minimumBid,
-            reservePrice: _reservePrice,
-            startTime: _startTimestamp,
-            endTime: _endTimestamp,
+            reservePrice: params.reservePrice,
+            startTime: params.startTimestamp,
+            endTime: params.endTimestamp,
             resulted: false
         });
 
-        emit AuctionCreated(_nftAddress, _tokenId, _payToken);
+        emit AuctionCreated(params.nftAddress, params.tokenId, params.payToken);
+    }
+
+    function _placeBid(PlaceBidParams memory params) internal {
+        Auction storage auction = auctions[params.nftAddress][params.tokenId];
+
+        HighestBid storage highestBid = highestBids[params.nftAddress][
+            params.tokenId
+        ];
+        uint256 minBidRequired = highestBid.bid.add(minBidIncrement);
+
+        IERC20 payToken = IERC20(auction.payToken);
+
+        require(whenNotPaused(), "contract paused");
+
+        require(
+            params.bidAmount >= minBidRequired,
+            "failed to outbid highest bidder"
+        );
+
+        require(
+            payToken.transferFrom(params.user, address(this), params.bidAmount),
+            "insufficient balance or not approved"
+        );
+
+        if (auction.minBid == auction.reservePrice) {
+            require(
+                params.bidAmount >= auction.reservePrice,
+                "bid cannot be lower than reserve price"
+            );
+        }
+
+        if (highestBid.bidder != address(0)) {
+            _refundHighestBidder(
+                params.nftAddress,
+                params.tokenId,
+                highestBid.bidder,
+                highestBid.bid
+            );
+        }
+
+        // assign top bidder and bid time
+        highestBid.bidder = payable(_msgSender());
+        highestBid.bid = params.bidAmount;
+        highestBid.lastBidTime = _getNow();
+
+        emit BidPlaced(
+            params.nftAddress,
+            params.tokenId,
+            params.user,
+            params.bidAmount
+        );
+    }
+
+    function _resultAuction(
+        ResultAuctionParams memory params
+    ) internal nonReentrant {
+        // Check the auction to see if it can be resulted
+        Auction storage auction = auctions[params.nftAddress][params.tokenId];
+
+        // Result the auction
+        auction.resulted = true;
+
+        // Clean up the highest bid
+        delete highestBids[params.nftAddress][params.tokenId];
+
+        uint256 payAmount;
+        uint256 platformFeeBid = params.winningBid.mul(platformFee).div(1000);
+
+        IERC20(auction.payToken).safeTransfer(
+            platformFeeRecipient,
+            platformFeeBid
+        );
+
+        payAmount = params.winningBid.sub(platformFeeBid);
+
+        INiftyRoyaltyRegistry royaltyRegistry = INiftyRoyaltyRegistry(
+            addressRegistry.royaltyRegistry()
+        );
+
+        address minter;
+        uint256 royaltyAmount;
+
+        (minter, royaltyAmount) = royaltyRegistry.royaltyInfo(
+            params.nftAddress,
+            params.tokenId,
+            params.winningBid
+        );
+
+        if (minter != address(0) && royaltyAmount != 0) {
+            IERC20 payToken = IERC20(auction.payToken);
+            payToken.safeTransfer(minter, royaltyAmount);
+
+            payAmount = payAmount.sub(royaltyAmount);
+        }
+
+        if (payAmount > 0) {
+            IERC20 payToken = IERC20(auction.payToken);
+            payToken.safeTransfer(auction.owner, payAmount);
+        }
+
+        // Transfer the token to the winner
+        IERC721(params.nftAddress).safeTransferFrom(
+            IERC721(params.nftAddress).ownerOf(params.tokenId),
+            params.winner,
+            params.tokenId
+        );
+
+        int256 price = INiftyMarketplace(addressRegistry.marketplace())
+            .getPrice(auction.payToken);
+
+        emit AuctionResulted(
+            params.user,
+            params.nftAddress,
+            params.tokenId,
+            params.winner,
+            auction.payToken,
+            price,
+            params.winningBid
+        );
+
+        // Remove auction
+        delete auctions[params.nftAddress][params.tokenId];
     }
 
     function _cancelAuction(
-        address _nftAddress,
-        uint256 _tokenId,
-        address owner
-    ) private {
+        CancelAuctionParams memory params
+    ) internal nonReentrant {
         // refund existing top bidder if found
-        HighestBid memory highestBid = highestBids[_nftAddress][_tokenId];
+        HighestBid memory highestBid = highestBids[params.nftAddress][
+            params.tokenId
+        ];
         if (highestBid.bidder != address(0)) {
             _refundHighestBidder(
-                _nftAddress,
-                _tokenId,
+                params.nftAddress,
+                params.tokenId,
                 highestBid.bidder,
                 highestBid.bid
             );
 
             // Clear up highest bid
-            delete highestBids[_nftAddress][_tokenId];
+            delete highestBids[params.nftAddress][params.tokenId];
         }
 
         // Remove auction and top bidder
-        delete auctions[_nftAddress][_tokenId];
+        delete auctions[params.nftAddress][params.tokenId];
 
         // Transfer the NFT ownership back to _msgSender()
-        IERC721(_nftAddress).safeTransferFrom(
-            IERC721(_nftAddress).ownerOf(_tokenId),
-            owner,
-            _tokenId
+        IERC721(params.nftAddress).safeTransferFrom(
+            IERC721(params.nftAddress).ownerOf(params.tokenId),
+            params.owner,
+            params.tokenId
         );
 
-        emit AuctionCancelled(_nftAddress, _tokenId);
+        emit AuctionCancelled(params.nftAddress, params.tokenId);
     }
 
     /**
@@ -888,5 +1284,16 @@ contract NiftyAuction is
         IERC20 token = IERC20(_tokenContract);
         uint256 balance = token.balanceOf(address(this));
         token.safeTransfer(_msgSender(), balance);
+    }
+
+    function _recoverAddressFromSignature(
+        bytes32 _dataHash,
+        bytes memory _signature
+    ) public pure returns (address) {
+        // add the prefix "\x19Ethereum Signed Message:\n32"
+        bytes32 _prefixedHash = ECDSA.toEthSignedMessageHash(_dataHash);
+
+        // recover the signer's address and return it
+        return ECDSA.recover(_prefixedHash, _signature);
     }
 }
