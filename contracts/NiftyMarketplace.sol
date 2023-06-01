@@ -881,7 +881,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         }
     }
 
-    function _listItem(ListItemParams memory params) internal nonReentrant {
+    function _listItem(ListItemParams memory params) internal {
         require(
             notListed(params.nftAddress, params.tokenId, params.user),
             "already listed"
@@ -934,9 +934,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
-    function _cancelListing(
-        CancelListingParams memory params
-    ) internal nonReentrant {
+    function _cancelListing(CancelListingParams memory params) internal {
         require(
             isListed(params.nftAddress, params.tokenId, params.user),
             "not listed"
@@ -957,9 +955,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit ItemCanceled(params.user, params.nftAddress, params.tokenId);
     }
 
-    function _updateListing(
-        UpdateListingParams memory params
-    ) internal nonReentrant {
+    function _updateListing(UpdateListingParams memory params) internal {
         require(
             isListed(params.nftAddress, params.tokenId, params.user),
             "not listed"
@@ -989,7 +985,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
-    function _buyItem(BuyItemParams memory params) internal nonReentrant {
+    function _buyItem(BuyItemParams memory params) internal {
         require(
             isListed(params.nftAddress, params.tokenId, params.owner),
             "not listed"
@@ -1081,9 +1077,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         delete (listings[params.nftAddress][params.tokenId][params.owner]);
     }
 
-    function _createOffer(
-        CreateOfferParams memory params
-    ) internal nonReentrant {
+    function _createOffer(CreateOfferParams memory params) internal {
         require(
             IERC165(params.nftAddress).supportsInterface(INTERFACE_ID_ERC721) ||
                 IERC165(params.nftAddress).supportsInterface(
@@ -1136,9 +1130,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
-    function _cancelOffer(
-        CancelOfferParams memory params
-    ) internal nonReentrant {
+    function _cancelOffer(CancelOfferParams memory params) internal {
         Offer memory offer = offers[params.nftAddress][params.tokenId][
             _msgSender()
         ];
@@ -1155,9 +1147,7 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit OfferCanceled(params.user, params.nftAddress, params.tokenId);
     }
 
-    function _acceptOffer(
-        AcceptOfferParams memory params
-    ) internal nonReentrant {
+    function _acceptOffer(AcceptOfferParams memory params) internal {
         require(
             offerExists(params.nftAddress, params.tokenId, params.creator),
             "offer does not exists"

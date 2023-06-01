@@ -1049,9 +1049,7 @@ contract NiftyAuction is
         return block.timestamp;
     }
 
-    function _createAuction(
-        CreatAuctionParams memory params
-    ) internal nonReentrant {
+    function _createAuction(CreatAuctionParams memory params) internal {
         // Ensure a token cannot be re-listed if previously successfully sold
         require(
             auctions[params.nftAddress][params.tokenId].endTime == 0,
@@ -1147,9 +1145,7 @@ contract NiftyAuction is
         );
     }
 
-    function _resultAuction(
-        ResultAuctionParams memory params
-    ) internal nonReentrant {
+    function _resultAuction(ResultAuctionParams memory params) internal {
         // Check the auction to see if it can be resulted
         Auction storage auction = auctions[params.nftAddress][params.tokenId];
 
@@ -1218,9 +1214,7 @@ contract NiftyAuction is
         delete auctions[params.nftAddress][params.tokenId];
     }
 
-    function _cancelAuction(
-        CancelAuctionParams memory params
-    ) internal nonReentrant {
+    function _cancelAuction(CancelAuctionParams memory params) internal {
         // refund existing top bidder if found
         HighestBid memory highestBid = highestBids[params.nftAddress][
             params.tokenId
