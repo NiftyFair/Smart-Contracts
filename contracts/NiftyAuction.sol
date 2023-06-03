@@ -194,10 +194,9 @@ contract NiftyAuction is
     }
 
     /// @notice Contract initializer
-    function initialize(address payable _platformFeeRecipient)
-        public
-        initializer
-    {
+    function initialize(
+        address payable _platformFeeRecipient
+    ) public initializer {
         require(
             _platformFeeRecipient != address(0),
             "NiftyAuction: Invalid Platform Fee Recipient"
@@ -440,10 +439,10 @@ contract NiftyAuction is
      @param _nftAddress ERC 721 Address
      @param _tokenId Token ID of the item being auctioned
      */
-    function withdrawBid(address _nftAddress, uint256 _tokenId)
-        external
-        nonReentrant
-    {
+    function withdrawBid(
+        address _nftAddress,
+        uint256 _tokenId
+    ) external nonReentrant {
         HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
         Auction memory auction = auctions[_nftAddress][_tokenId];
 
@@ -531,10 +530,10 @@ contract NiftyAuction is
      @param _nftAddress ERC 721 Address
      @param _tokenId Token ID of the item being auctioned
      */
-    function resultAuction(address _nftAddress, uint256 _tokenId)
-        external
-        nonReentrant
-    {
+    function resultAuction(
+        address _nftAddress,
+        uint256 _tokenId
+    ) external nonReentrant {
         // Check the auction to see if it can be resulted
         Auction storage auction = auctions[_nftAddress][_tokenId];
 
@@ -662,10 +661,10 @@ contract NiftyAuction is
      @param _nftAddress ERC 721 Address
      @param _tokenId Token ID of the item being auctioned
      */
-    function resultFailedAuction(address _nftAddress, uint256 _tokenId)
-        external
-        nonReentrant
-    {
+    function resultFailedAuction(
+        address _nftAddress,
+        uint256 _tokenId
+    ) external nonReentrant {
         // Check the auction to see if it can be resulted
         Auction storage auction = auctions[_nftAddress][_tokenId];
 
@@ -788,10 +787,10 @@ contract NiftyAuction is
      @param _nftAddress ERC 721 Address
      @param _tokenId Token ID of the NFT being auctioned
      */
-    function cancelAuction(address _nftAddress, uint256 _tokenId)
-        external
-        nonReentrant
-    {
+    function cancelAuction(
+        address _nftAddress,
+        uint256 _tokenId
+    ) external nonReentrant {
         // Check valid and not resulted
         Auction memory auction = auctions[_nftAddress][_tokenId];
         HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
@@ -884,10 +883,9 @@ contract NiftyAuction is
      @dev Only admin
      @param _minBidIncrement New bid step in WEI
      */
-    function updateMinBidIncrement(uint256 _minBidIncrement)
-        external
-        onlyOwner
-    {
+    function updateMinBidIncrement(
+        uint256 _minBidIncrement
+    ) external onlyOwner {
         minBidIncrement = _minBidIncrement;
         emit UpdateMinBidIncrement(_minBidIncrement);
     }
@@ -897,10 +895,9 @@ contract NiftyAuction is
      @dev Only admin
      @param _bidWithdrawalLockTime New bid withdrawal lock time
      */
-    function updateBidWithdrawalLockTime(uint256 _bidWithdrawalLockTime)
-        external
-        onlyOwner
-    {
+    function updateBidWithdrawalLockTime(
+        uint256 _bidWithdrawalLockTime
+    ) external onlyOwner {
         bidWithdrawalLockTime = _bidWithdrawalLockTime;
         emit UpdateBidWithdrawalLockTime(_bidWithdrawalLockTime);
     }
@@ -972,7 +969,7 @@ contract NiftyAuction is
         bytes memory _signature
     ) external {
         address user = _recoverAddressFromSignature(
-            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            keccak256(abi.encodePacked(_nftAddress, _tokenId, _reservePrice)),
             _signature
         );
 
@@ -1028,10 +1025,9 @@ contract NiftyAuction is
      @dev Only admin
      @param _platformFeeRecipient payable address the address to sends the funds to
      */
-    function updatePlatformFeeRecipient(address payable _platformFeeRecipient)
-        external
-        onlyOwner
-    {
+    function updatePlatformFeeRecipient(
+        address payable _platformFeeRecipient
+    ) external onlyOwner {
         require(_platformFeeRecipient != address(0), "zero address");
 
         platformFeeRecipient = _platformFeeRecipient;
@@ -1055,7 +1051,10 @@ contract NiftyAuction is
      @param _nftAddress ERC 721 Address
      @param _tokenId Token ID of the NFT being auctioned
      */
-    function getAuction(address _nftAddress, uint256 _tokenId)
+    function getAuction(
+        address _nftAddress,
+        uint256 _tokenId
+    )
         external
         view
         returns (
@@ -1084,14 +1083,13 @@ contract NiftyAuction is
      @notice Method for getting all info about the highest bidder
      @param _tokenId Token ID of the NFT being auctioned
      */
-    function getHighestBidder(address _nftAddress, uint256 _tokenId)
+    function getHighestBidder(
+        address _nftAddress,
+        uint256 _tokenId
+    )
         external
         view
-        returns (
-            address payable _bidder,
-            uint256 _bid,
-            uint256 _lastBidTime
-        )
+        returns (address payable _bidder, uint256 _bid, uint256 _lastBidTime)
     {
         HighestBid storage highestBid = highestBids[_nftAddress][_tokenId];
         return (highestBid.bidder, highestBid.bid, highestBid.lastBidTime);
