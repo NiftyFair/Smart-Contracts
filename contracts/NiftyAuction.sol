@@ -954,6 +954,63 @@ contract NiftyAuction is
     }
 
     /**
+     @notice Update the current reserve price for an auction
+     @dev Only admin
+     @dev Auction must exist
+     @dev Reserve price can only be decreased and never increased
+     @param _nftAddress ERC 721 Address
+     @param _tokenId Token ID of the NFT being auctioned
+     @param _reservePrice New Ether reserve price (WEI value)
+     */
+    function updateAuctionReservePriceMeta(
+        address _nftAddress,
+        uint256 _tokenId,
+        uint256 _reservePrice,
+        bytes memory _signature
+    ) external {
+        address user = _recoverAddressFromSignature(
+            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            _signature
+        );
+
+        Auction storage auction = auctions[_nftAddress][_tokenId];
+        // Store the current reservePrice
+        uint256 currentReserve = auction.reservePrice;
+
+        // Ensures the sender owns the auction and the item is currently in escrow
+        require(
+            IERC721(_nftAddress).ownerOf(_tokenId) == address(this) &&
+                user == auction.owner,
+            "Sender must be item owner and NFT must be in escrow"
+        );
+
+        // Ensures the auction hasn't been resulted
+        require(!auction.resulted, "Auction already resulted");
+
+        // Ensures auction exists
+        require(auction.endTime > 0, "No auction exists");
+
+        // Ensures the reserve price can only be decreased and never increased
+        require(
+            _reservePrice < currentReserve,
+            "Reserve price can only be decreased"
+        );
+
+        auction.reservePrice = _reservePrice;
+
+        if (auction.minBid == currentReserve) {
+            auction.minBid = _reservePrice;
+        }
+
+        emit UpdateAuctionReservePrice(
+            _nftAddress,
+            _tokenId,
+            auction.payToken,
+            _reservePrice
+        );
+    }
+
+    /**
      @notice Method for updating platform fee
      @dev Only admin
      @param _platformFee uint256 the platform fee to set
