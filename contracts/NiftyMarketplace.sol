@@ -236,10 +236,10 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /// @notice Contract initializer
-    function initialize(address payable _feeRecipient, uint16 _platformFee)
-        public
-        initializer
-    {
+    function initialize(
+        address payable _feeRecipient,
+        uint16 _platformFee
+    ) public initializer {
         platformFee = _platformFee;
         feeReceipient = _feeRecipient;
 
@@ -334,10 +334,10 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /// @notice Method for canceling listed NFT
-    function cancelListing(address _nftAddress, uint256 _tokenId)
-        external
-        nonReentrant
-    {
+    function cancelListing(
+        address _nftAddress,
+        uint256 _tokenId
+    ) external nonReentrant {
         require(isListed(_nftAddress, _tokenId, _msgSender()), "not listed");
 
         CancelListingParams memory params = CancelListingParams({
@@ -697,10 +697,10 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Method for canceling the offer
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
-    function cancelOffer(address _nftAddress, uint256 _tokenId)
-        external
-        nonReentrant
-    {
+    function cancelOffer(
+        address _nftAddress,
+        uint256 _tokenId
+    ) external nonReentrant {
         CancelOfferParams memory params = CancelOfferParams({
             user: _msgSender(),
             nftAddress: _nftAddress,
@@ -803,9 +803,9 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             (unitPrice, decimals) = priceFeed.getPrice(_payToken);
         }
         if (decimals < 18) {
-            unitPrice = unitPrice * (int256(10)**(18 - decimals));
+            unitPrice = unitPrice * (int256(10) ** (18 - decimals));
         } else {
-            unitPrice = unitPrice / (int256(10)**(decimals - 18));
+            unitPrice = unitPrice / (int256(10) ** (decimals - 18));
         }
 
         return unitPrice;
@@ -826,10 +826,9 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      @dev Only admin
      @param _platformFeeRecipient payable address the address to sends the funds to
      */
-    function updatePlatformFeeRecipient(address payable _platformFeeRecipient)
-        external
-        onlyOwner
-    {
+    function updatePlatformFeeRecipient(
+        address payable _platformFeeRecipient
+    ) external onlyOwner {
         feeReceipient = _platformFeeRecipient;
         emit UpdatePlatformFeeRecipient(_platformFeeRecipient);
     }

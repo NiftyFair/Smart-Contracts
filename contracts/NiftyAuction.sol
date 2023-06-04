@@ -1187,7 +1187,7 @@ contract NiftyAuction is
         }
 
         // assign top bidder and bid time
-        highestBid.bidder = payable(_msgSender());
+        highestBid.bidder = payable(params.user);
         highestBid.bid = params.bidAmount;
         highestBid.lastBidTime = _getNow();
 
