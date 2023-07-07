@@ -52,8 +52,20 @@ module.exports = {
   },
   networks: {
     gc: {
-      url: `https://rpc.gnosischain.com`,
+      url: "https://rpc.gnosischain.com",
       chainId: 100,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
+
+    zksync: {
+      url: "https://mainnet.era.zksync.io",
+      chainId: 324,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
+
+    zksynctest: {
+      url: "https://testnet.era.zksync.dev",
+      chainId: 280,
       accounts: [`0x${PRIVATE_KEY}`],
     },
 
@@ -62,7 +74,7 @@ module.exports = {
     },
 
     localhost: {
-      url: `http://127.0.0.1:8545`,
+      url: "http://127.0.0.1:8545",
     },
   },
 };

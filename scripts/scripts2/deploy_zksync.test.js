@@ -15,7 +15,7 @@ async function main(network) {
     TREASURY_ADDRESS,
     PLATFORM_FEE,
     PAY_TOKEN_MAINNET,
-  } = require("../constants.gc");
+  } = require("../constants.zksync");
 
   payToken = PAY_TOKEN_MAINNET;
 

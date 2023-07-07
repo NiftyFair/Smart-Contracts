@@ -11,13 +11,17 @@ async function main(network) {
   console.log(`Deployer's address: `, deployerAddress);
 
   const {
-    ZERO_ADDRESS,
     TREASURY_ADDRESS,
     PLATFORM_FEE,
     PAY_TOKEN_MAINNET,
+    PAY_TOKEN_TESTNET,
   } = require("../constants.gc");
 
-  payToken = PAY_TOKEN_MAINNET;
+  if (network.name === "localhost") {
+    payToken = PAY_TOKEN_TESTNET;
+  } else {
+    payToken = PAY_TOKEN_MAINNET;
+  }
 
   console.log("PayToken deployed at: ", payToken);
 
@@ -62,15 +66,17 @@ async function main(network) {
     "NiftyMarketplace Proxy deployed at:  ",
     marketplaceProxy.address
   );
-  const MARKETPLACE_PROXY_ADDRESS = marketplaceProxy.address;
   const marketplace = await ethers.getContractAt(
     "NiftyMarketplace",
     marketplaceProxy.address
   );
 
   await marketplace.initialize(TREASURY_ADDRESS, PLATFORM_FEE);
-  //   console.log('Marketplace Proxy initialized');
-
+  console.log(
+    "NiftyMarketplace intialialized:  ",
+    TREASURY_ADDRESS,
+    PLATFORM_FEE
+  );
   /////////
 
   ////////
@@ -87,15 +93,18 @@ async function main(network) {
 
   await auctionProxy.deployed();
   console.log("NiftyAuction Proxy deployed at:  ", auctionProxy.address);
-  const AUCTION_PROXY_ADDRESS = auctionProxy.address;
   const auction = await ethers.getContractAt(
     "NiftyAuction",
     auctionProxy.address
   );
 
   await auction.initialize(TREASURY_ADDRESS);
-  //   console.log('Auction Proxy initialized');
-
+  await auction.updatePlatformFee(PLATFORM_FEE);
+  console.log(
+    "NiftyAuction Proxy intialialized: ",
+    TREASURY_ADDRESS,
+    PLATFORM_FEE
+  );
   ////////
 
   ////////
@@ -147,13 +156,10 @@ async function main(network) {
   await auction.updateAddressRegistry(NIFTYFAIR_ADDRESS_REGISTRY);
 
   await addressRegistry.updateArtion(niftyToken.address);
-
   await addressRegistry.updateAuction(auction.address);
   await addressRegistry.updateMarketplace(marketplace.address);
-
   await addressRegistry.updateTokenRegistry(tokenRegistry.address);
   await addressRegistry.updatePriceFeed(priceFeed.address);
-
   await addressRegistry.updateRoyaltyRegistry(royaltyRegistery.address);
 
   await tokenRegistry.add(PAY_TOKEN);
