@@ -11,9 +11,16 @@ require("@openzeppelin/hardhat-upgrades");
 require("@openzeppelin/test-helpers");
 require("@nomiclabs/hardhat-web3");
 
+require("@matterlabs/hardhat-zksync-solc");
+require("@matterlabs/hardhat-zksync-deploy");
+
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
 module.exports = {
+  zksolc: {
+    version: "latest", // Uses latest available in https://github.com/matter-labs/zksolc-bin/
+    settings: {},
+  },
   solidity: {
     compilers: [
       {
@@ -53,18 +60,23 @@ module.exports = {
   networks: {
     gc: {
       url: "https://rpc.gnosischain.com",
+      zksync: false,
       chainId: 100,
       accounts: [`0x${PRIVATE_KEY}`],
     },
 
     zksync: {
       url: "https://mainnet.era.zksync.io",
+      zksync: true,
+      ethNetwork: "mainnet",
       chainId: 324,
       accounts: [`0x${PRIVATE_KEY}`],
     },
 
     zksynctest: {
       url: "https://testnet.era.zksync.dev",
+      zksync: true,
+      ethNetwork: "goerli",
       chainId: 280,
       accounts: [`0x${PRIVATE_KEY}`],
     },

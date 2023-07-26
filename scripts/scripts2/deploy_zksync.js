@@ -1,6 +1,7 @@
 // to deploy locally
 // run: npx hardhat node on a terminal
 // then run: npx hardhat run  scripts/scripts2/deploy_gc.js --network localhost
+// npx hardhat deploy-zksync --script scripts/scripts2/deploy_zksync.js --network zksynctest
 async function main(network) {
   console.log("network: ", network.name);
 
