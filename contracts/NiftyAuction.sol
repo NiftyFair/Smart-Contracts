@@ -13,15 +13,9 @@ import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 interface INiftyAddressRegistry {
-    function marketplace() external view returns (address);
-
     function tokenRegistry() external view returns (address);
 
     function royaltyRegistry() external view returns (address);
-}
-
-interface INiftyMarketplace {
-    function getPrice(address) external view returns (int256);
 }
 
 interface INiftyTokenRegistry {
@@ -53,10 +47,15 @@ contract NiftyAuction is
 
     event PauseToggled(bool isPaused);
 
-    event AuctionCreated(
+    event AuctionCreatedDetails(
         address indexed nftAddress,
         uint256 indexed tokenId,
-        address payToken
+        address payToken,
+        address owner,
+        uint256 minBid,
+        uint256 reservePrice,
+        uint256 startTime,
+        uint256 endTime
     );
 
     event UpdateAuctionReservePrice(
@@ -95,13 +94,12 @@ contract NiftyAuction is
         uint256 bid
     );
 
-    event AuctionResulted(
+    event AuctionFinalized(
         address oldOwner,
         address indexed nftAddress,
         uint256 indexed tokenId,
         address indexed winner,
         address payToken,
-        int256 unitPrice,
         uint256 winningBid
     );
 
@@ -187,10 +185,6 @@ contract NiftyAuction is
 
     function whenNotPaused() public view returns (bool) {
         return !isPaused;
-    }
-
-    function onlyNotContract() public view returns (bool) {
-        return _msgSender() == tx.origin;
     }
 
     /// @notice Contract initializer
@@ -357,7 +351,6 @@ contract NiftyAuction is
         Auction memory auction = auctions[_nftAddress][_tokenId];
 
         require(whenNotPaused(), "contract paused");
-        require(onlyNotContract(), "no contracts permitted");
 
         require(auction.endTime > 0, "No auction exists");
 
@@ -406,7 +399,6 @@ contract NiftyAuction is
         Auction memory auction = auctions[_nftAddress][_tokenId];
 
         require(whenNotPaused(), "contract paused");
-        require(onlyNotContract(), "no contracts permitted");
 
         require(auction.endTime > 0, "No auction exists");
 
@@ -1145,7 +1137,16 @@ contract NiftyAuction is
             resulted: false
         });
 
-        emit AuctionCreated(params.nftAddress, params.tokenId, params.payToken);
+        emit AuctionCreatedDetails(
+            params.nftAddress,
+            params.tokenId,
+            params.payToken,
+            params.user,
+            minimumBid,
+            params.reservePrice,
+            params.startTimestamp,
+            params.endTimestamp
+        );
     }
 
     function _placeBid(PlaceBidParams memory params) internal {
@@ -1251,16 +1252,12 @@ contract NiftyAuction is
             params.tokenId
         );
 
-        int256 price = INiftyMarketplace(addressRegistry.marketplace())
-            .getPrice(auction.payToken);
-
-        emit AuctionResulted(
+        emit AuctionFinalized(
             params.user,
             params.nftAddress,
             params.tokenId,
             params.winner,
             auction.payToken,
-            price,
             params.winningBid
         );
 

@@ -14,29 +14,13 @@ import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 interface INiftyAddressRegistry {
-    function auction() external view returns (address);
-
-    function factory() external view returns (address);
-
     function tokenRegistry() external view returns (address);
-
-    function priceFeed() external view returns (address);
 
     function royaltyRegistry() external view returns (address);
 }
 
-interface INiftyNFTFactory {
-    function exists(address) external view returns (bool);
-}
-
 interface INiftyTokenRegistry {
     function enabled(address) external view returns (bool);
-}
-
-interface INiftyPriceFeed {
-    function wXDAI() external view returns (address);
-
-    function getPrice(address) external view returns (int256, uint8);
 }
 
 interface INiftyRoyaltyRegistry {
@@ -63,14 +47,14 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 startingTime,
         uint256 endingTime
     );
-    event ItemSold(
+    event ItemSoldMarket(
         address indexed seller,
         address indexed buyer,
         address indexed nft,
         uint256 tokenId,
+        string sellType,
         uint256 quantity,
         address payToken,
-        int256 unitPrice,
         uint256 pricePerItem
     );
     event ItemUpdated(
@@ -787,31 +771,6 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /**
-     @notice Method for getting price for pay token
-     @param _payToken Paying token
-     */
-    function getPrice(address _payToken) public view returns (int256) {
-        int256 unitPrice;
-        uint8 decimals;
-        INiftyPriceFeed priceFeed = INiftyPriceFeed(
-            addressRegistry.priceFeed()
-        );
-
-        if (_payToken == address(0)) {
-            (unitPrice, decimals) = priceFeed.getPrice(priceFeed.wXDAI());
-        } else {
-            (unitPrice, decimals) = priceFeed.getPrice(_payToken);
-        }
-        if (decimals < 18) {
-            unitPrice = unitPrice * (int256(10) ** (18 - decimals));
-        } else {
-            unitPrice = unitPrice / (int256(10) ** (decimals - 18));
-        }
-
-        return unitPrice;
-    }
-
-    /**
      @notice Method for updating platform fee
      @dev Only admin
      @param _platformFee uint16 the platform fee to set
@@ -1064,14 +1023,14 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             );
         }
 
-        emit ItemSold(
+        emit ItemSoldMarket(
             params.owner,
             params.user,
             params.nftAddress,
             params.tokenId,
+            "market",
             listedItem.quantity,
             params.payToken,
-            getPrice(params.payToken),
             price.div(listedItem.quantity)
         );
         delete (listings[params.nftAddress][params.tokenId][params.owner]);
@@ -1213,14 +1172,14 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             );
         }
 
-        emit ItemSold(
+        emit ItemSoldMarket(
             params.user,
             params.creator,
             params.nftAddress,
             params.tokenId,
+            "offer",
             offer.quantity,
             address(offer.payToken),
-            getPrice(address(offer.payToken)),
             offer.pricePerItem
         );
     }

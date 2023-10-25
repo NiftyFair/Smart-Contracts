@@ -57,6 +57,18 @@ module.exports = {
       accounts: [`0x${PRIVATE_KEY}`],
     },
 
+    linea: {
+      url: `https://rpc.linea.build`,
+      chainId: 59144,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
+
+    lineaTestnet: {
+      url: `https://linea-goerli.infura.io/v3/9a5bdcb7c4ef40b0a5558dfd58836186`,
+      chainId: 59140,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
+
     coverage: {
       url: "http://localhost:8555",
     },
