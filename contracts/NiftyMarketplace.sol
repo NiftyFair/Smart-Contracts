@@ -162,6 +162,8 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     bytes4 private constant INTERFACE_ID_ERC721 = 0x80ac58cd;
     bytes4 private constant INTERFACE_ID_ERC1155 = 0xd9b67a26;
 
+    mapping(address => uint256) private nonces;
+
     /// @notice NftAddress -> Token ID -> Owner -> Listing item
     mapping(address => mapping(uint256 => mapping(address => Listing)))
         public listings;
@@ -178,6 +180,10 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /// @notice Address registry
     INiftyAddressRegistry public addressRegistry;
+
+    function getNonce(address _signer) public view returns (uint256) {
+        return nonces[_signer];
+    }
 
     function isListed(
         address _nftAddress,
@@ -267,15 +273,6 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _listItem(params);
     }
 
-    /// @notice Method for listing NFT
-    /// @param _nftAddress Address of NFT contract
-    /// @param _tokenId Token ID of NFT
-    /// @param _quantity token amount to list (needed for ERC-1155 NFTs, set as 1 for ERC-721)
-    /// @param _payToken Paying token
-    /// @param _pricePerItem sale price for each iteam
-    /// @param _startingTime scheduling for a future sale
-    /// @param _endingTime scheduling for a future sale
-    /// @param _signature Signature of sender
     function listItemMeta(
         address _nftAddress,
         uint256 _tokenId,
@@ -284,6 +281,29 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 _pricePerItem,
         uint256 _startingTime,
         uint256 _endingTime,
+        bytes memory _signature
+    ) external {}
+
+    /// @notice Method for listing NFT
+    /// @param _nftAddress Address of NFT contract
+    /// @param _tokenId Token ID of NFT
+    /// @param _quantity token amount to list (needed for ERC-1155 NFTs, set as 1 for ERC-721)
+    /// @param _payToken Paying token
+    /// @param _pricePerItem sale price for each iteam
+    /// @param _startingTime scheduling for a future sale
+    /// @param _endingTime scheduling for a future sale
+    /// @param _nonce Signature of sender
+    /// @param _signature Signature of sender
+    /// @param _nonce Nonce of signer
+    function listItemRelay(
+        address _nftAddress,
+        uint256 _tokenId,
+        uint256 _quantity,
+        address _payToken,
+        uint256 _pricePerItem,
+        uint256 _startingTime,
+        uint256 _endingTime,
+        uint256 _nonce,
         bytes memory _signature
     ) external {
         address user = _recoverAddressFromSignature(
@@ -295,11 +315,15 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                     _payToken,
                     _pricePerItem,
                     _startingTime,
-                    _endingTime
+                    _endingTime,
+                    _nonce
                 )
             ),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
 
         require(notListed(_nftAddress, _tokenId, user), "already listed");
 
@@ -333,16 +357,26 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _cancelListing(params);
     }
 
-    /// @notice Method for canceling listed NFT
     function cancelListingMeta(
         address _nftAddress,
         uint256 _tokenId,
         bytes memory _signature
+    ) external nonReentrant {}
+
+    /// @notice Method for canceling listed NFT
+    function cancelListingRelay(
+        address _nftAddress,
+        uint256 _tokenId,
+        uint256 _nonce,
+        bytes memory _signature
     ) external nonReentrant {
         address user = _recoverAddressFromSignature(
-            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            keccak256(abi.encodePacked(_nftAddress, _tokenId, _nonce)),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
 
         require(isListed(_nftAddress, _tokenId, user), "not listed");
 
@@ -379,25 +413,44 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _updateListing(params);
     }
 
-    /// @notice Method for updating listed NFT
-    /// @param _nftAddress Address of NFT contract
-    /// @param _tokenId Token ID of NFT
-    /// @param _payToken payment token
-    /// @param _newPrice New sale price for each iteam
-    /// @param _signature Signature of sender
     function updateListingMeta(
         address _nftAddress,
         uint256 _tokenId,
         address _payToken,
         uint256 _newPrice,
         bytes memory _signature
+    ) external nonReentrant {}
+
+    /// @notice Method for updating listed NFT
+    /// @param _nftAddress Address of NFT contract
+    /// @param _tokenId Token ID of NFT
+    /// @param _payToken payment token
+    /// @param _newPrice New sale price for each iteam
+    /// @param _signature Signature of sender
+    /// @param _nonce Nonce of signer
+    function updateListingRealy(
+        address _nftAddress,
+        uint256 _tokenId,
+        address _payToken,
+        uint256 _newPrice,
+        uint256 _nonce,
+        bytes memory _signature
     ) external nonReentrant {
         address user = _recoverAddressFromSignature(
             keccak256(
-                abi.encodePacked(_nftAddress, _tokenId, _payToken, _newPrice)
+                abi.encodePacked(
+                    _nftAddress,
+                    _tokenId,
+                    _payToken,
+                    _newPrice,
+                    _nonce
+                )
             ),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
 
         require(isListed(_nftAddress, _tokenId, user), "not listed");
 
@@ -435,15 +488,25 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _buyItem(params);
     }
 
-    /// @notice Method for buying listed NFT
-    /// @param _nftAddress NFT contract address
-    /// @param _tokenId TokenId
-    /// @param _signature Signature of sender
     function buyItemMeta(
         address _nftAddress,
         uint256 _tokenId,
         address _payToken,
         address _owner,
+        bytes memory _signature
+    ) external nonReentrant {}
+
+    /// @notice Method for buying listed NFT
+    /// @param _nftAddress NFT contract address
+    /// @param _tokenId TokenId
+    /// @param _signature Signature of sender
+    /// @param _nonce Nonce of signer
+    function buyItemRelay(
+        address _nftAddress,
+        uint256 _tokenId,
+        address _payToken,
+        address _owner,
+        uint256 _nonce,
         bytes memory _signature
     ) external nonReentrant {
         require(isListed(_nftAddress, _tokenId, _owner), "not listed");
@@ -451,10 +514,19 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         address user = _recoverAddressFromSignature(
             keccak256(
-                abi.encodePacked(_nftAddress, _tokenId, _payToken, _owner)
+                abi.encodePacked(
+                    _nftAddress,
+                    _tokenId,
+                    _payToken,
+                    _owner,
+                    _nonce
+                )
             ),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
 
         BuyItemParams memory params = BuyItemParams({
             user: user,
@@ -530,16 +602,26 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         }
     }
 
-    /// @notice Method for buying multiple items at once
-    /// @param _nftAddresses NFT array contract address
-    /// @param _tokenIds array of TokenId
-    /// @param _payTokens array of paying tokens
-    /// @param _tokenOwners array of token owners
     function bulkBuyMeta(
         address[] memory _nftAddresses,
         uint256[] memory _tokenIds,
         address[] memory _payTokens,
         address[] memory _tokenOwners,
+        bytes memory _signature
+    ) external nonReentrant {}
+
+    /// @notice Method for buying multiple items at once
+    /// @param _nftAddresses NFT array contract address
+    /// @param _tokenIds array of TokenId
+    /// @param _payTokens array of paying tokens
+    /// @param _tokenOwners array of token owners
+    /// @param _nonce Nonce of signer
+    function bulkBuyRelay(
+        address[] memory _nftAddresses,
+        uint256[] memory _tokenIds,
+        address[] memory _payTokens,
+        address[] memory _tokenOwners,
+        uint256 _nonce,
         bytes memory _signature
     ) external nonReentrant {
         require(
@@ -563,11 +645,15 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                     _nftAddresses,
                     _tokenIds,
                     _payTokens,
-                    _tokenOwners
+                    _tokenOwners,
+                    _nonce
                 )
             ),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
 
         Listing memory listedItem;
 
@@ -634,6 +720,16 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _createOffer(params);
     }
 
+    function createOfferMeta(
+        address _nftAddress,
+        uint256 _tokenId,
+        IERC20 _payToken,
+        uint256 _quantity,
+        uint256 _pricePerItem,
+        uint256 _deadline,
+        bytes memory _signature
+    ) external nonReentrant {}
+
     /// @notice Method for offering item
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
@@ -642,13 +738,15 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @param _pricePerItem Price per item
     /// @param _deadline Offer expiration
     /// @param _signature Signature of sender
-    function createOfferMeta(
+    /// @param _nonce Nonce of signer
+    function createOfferRelay(
         address _nftAddress,
         uint256 _tokenId,
         IERC20 _payToken,
         uint256 _quantity,
         uint256 _pricePerItem,
         uint256 _deadline,
+        uint256 _nonce,
         bytes memory _signature
     ) external nonReentrant {
         address user = _recoverAddressFromSignature(
@@ -659,11 +757,15 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                     _payToken,
                     _quantity,
                     _pricePerItem,
-                    _deadline
+                    _deadline,
+                    _nonce
                 )
             ),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
 
         CreateOfferParams memory params = CreateOfferParams({
             user: user,
@@ -694,19 +796,30 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _cancelOffer(params);
     }
 
-    /// @notice Method for canceling the offer
-    /// @param _nftAddress NFT contract address
-    /// @param _tokenId TokenId
-    /// @param _signature Signature of sender
     function cancelOfferMeta(
         address _nftAddress,
         uint256 _tokenId,
         bytes memory _signature
+    ) external nonReentrant {}
+
+    /// @notice Method for canceling the offer
+    /// @param _nftAddress NFT contract address
+    /// @param _tokenId TokenId
+    /// @param _signature Signature of sender
+    function cancelOfferRelay(
+        address _nftAddress,
+        uint256 _tokenId,
+        uint256 _nonce,
+        bytes memory _signature
     ) external nonReentrant {
         address user = _recoverAddressFromSignature(
-            keccak256(abi.encodePacked(_nftAddress, _tokenId)),
+            keccak256(abi.encodePacked(_nftAddress, _tokenId, _nonce)),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
+
         CancelOfferParams memory params = CancelOfferParams({
             user: user,
             nftAddress: _nftAddress,
@@ -739,15 +852,23 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _acceptOffer(params);
     }
 
+    function acceptOfferMeta(
+        address _nftAddress,
+        uint256 _tokenId,
+        address _creator,
+        bytes memory _signature
+    ) external nonReentrant {}
+
     /// @notice Method for accepting the offer
     /// @param _nftAddress NFT contract address
     /// @param _tokenId TokenId
     /// @param _creator Offer creator address
     /// @param _signature Signature of sender
-    function acceptOfferMeta(
+    function acceptOfferRelay(
         address _nftAddress,
         uint256 _tokenId,
         address _creator,
+        uint256 _nonce,
         bytes memory _signature
     ) external nonReentrant {
         require(
@@ -756,9 +877,14 @@ contract NiftyMarketplace is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
 
         address user = _recoverAddressFromSignature(
-            keccak256(abi.encodePacked(_nftAddress, _tokenId, _creator)),
+            keccak256(
+                abi.encodePacked(_nftAddress, _tokenId, _creator, _nonce)
+            ),
             _signature
         );
+
+        require(nonces[user] == _nonce, "Invalid nonce");
+        nonces[user]++;
 
         AcceptOfferParams memory params = AcceptOfferParams({
             user: user,
